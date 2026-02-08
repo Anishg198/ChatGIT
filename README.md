@@ -4,6 +4,8 @@
 
 ChatGIT is an intelligent code analysis tool that lets you have natural language conversations with your codebase. Using advanced RAG (Retrieval Augmented Generation), PageRank algorithms, and multi-language AST parsing, LLM helps you understand, navigate, and analyze any GitHub repository.
 
+Website – [ChatGIT](https://chatgit-x4l2.vercel.app)
+
 ---
 
 ## What is ChatGIT?
@@ -239,6 +241,7 @@ See [FINAL_STRUCTURE.md](FINAL_STRUCTURE.md) for complete details.
 - **HuggingFace** for BGE models
 
 --- 
+
 
 
 
