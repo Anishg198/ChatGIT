@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import axios from 'axios';
+import { API_BASE_URL } from '../config';
 
 const CallGraph = () => {
     const [graphElements, setGraphElements] = useState({ nodes: [], links: [] });
@@ -11,7 +12,7 @@ const CallGraph = () => {
 
     useEffect(() => {
         // Fetch list of functions for dropdown
-        axios.get('http://localhost:8000/api/call_graph')
+        axios.get('${API_BASE_URL}/api/call_graph')
             .then(res => {
                 if (res.data.functions) setNodeList(['Show All', ...res.data.functions]);
             })
@@ -21,7 +22,7 @@ const CallGraph = () => {
     useEffect(() => {
         const loadGraph = async () => {
             try {
-                const res = await axios.post('http://localhost:8000/api/call_graph/visualize', { target: focusedNode });
+                const res = await axios.post('${API_BASE_URL}/api/call_graph/visualize', { target: focusedNode });
                 if (res.data.nodes) {
                     const connections = res.data.edges.map(e => ({
                         source: e.source,

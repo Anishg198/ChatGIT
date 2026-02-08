@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '../config';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -29,7 +30,7 @@ const Chat = ({ chatLog, codeEnhancement }) => {
         setIsWaitingResponse(true);
 
         try {
-            const apiResponse = await axios.post('http://localhost:8000/api/chat', { message: newTask.content, enhance_code: codeEnhancement });
+            const apiResponse = await axios.post('${API_BASE_URL}/api/chat', { message: newTask.content, enhance_code: codeEnhancement });
             setConversation(apiResponse.data.history);
         } catch (err) {
             console.error("Communication failure", err);
@@ -58,17 +59,17 @@ const Chat = ({ chatLog, codeEnhancement }) => {
                                     // Check if code already has line numbers (format: "  123 | code")
                                     const lineNumberRegex = /^\s*(\d+)\s*\|\s*/;
                                     const hasLineNumbers = lineNumberRegex.test(codeString);
-                                    
+
                                     let startingLine = 1;
                                     let cleanedCode = codeString;
-                                    
+
                                     if (hasLineNumbers) {
                                         // Extract the starting line number
                                         const firstLineMatch = codeString.match(lineNumberRegex);
                                         if (firstLineMatch) {
                                             startingLine = parseInt(firstLineMatch[1], 10);
                                         }
-                                        
+
                                         // Remove line numbers from each line
                                         cleanedCode = codeString
                                             .split('\n')

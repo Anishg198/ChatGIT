@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from './config';
 import './App.css';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -20,12 +21,12 @@ function App() {
     // Check for existing session
     const restoreSession = async () => {
       try {
-        const repoResponse = await axios.get('http://localhost:8000/api/current_repo');
+        const repoResponse = await axios.get('${API_BASE_URL}/api/current_repo');
         if (repoResponse.data.repo_name) {
           setActiveRepo(repoResponse.data.repo_name);
-          const metricsResponse = await axios.get('http://localhost:8000/api/stats');
+          const metricsResponse = await axios.get('${API_BASE_URL}/api/stats');
           setRepoMetrics(metricsResponse.data);
-          const historyResponse = await axios.get('http://localhost:8000/api/chat/history');
+          const historyResponse = await axios.get('${API_BASE_URL}/api/chat/history');
           setConversationParams(historyResponse.data);
         }
       } catch (err) {
@@ -38,10 +39,10 @@ function App() {
   const initiateRepoLoad = async (repoUrl) => {
     setLoadingState(true);
     try {
-      const response = await axios.post('http://localhost:8000/api/load_repo', { github_url: repoUrl });
+      const response = await axios.post('${API_BASE_URL}/api/load_repo', { github_url: repoUrl });
       if (response.data.status === 'success') {
         setActiveRepo(response.data.repo_name);
-        const metrics = await axios.get('http://localhost:8000/api/stats');
+        const metrics = await axios.get('${API_BASE_URL}/api/stats');
         setRepoMetrics(metrics.data);
         setConversationParams([]);
       }
@@ -54,7 +55,7 @@ function App() {
 
   const resetRepository = async () => {
     try {
-      await axios.post('http://localhost:8000/api/clear_repo');
+      await axios.post('${API_BASE_URL}/api/clear_repo');
       setActiveRepo(null);
       setRepoMetrics(null);
       setConversationParams([]);

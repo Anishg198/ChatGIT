@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '../config';
 
 const Dashboard = ({ metrics }) => {
     const [currentView, setCurrentView] = useState('files');
@@ -11,9 +12,9 @@ const Dashboard = ({ metrics }) => {
         const loadAnalysisData = async () => {
             try {
                 const [filesRes, funcsRes, modsRes] = await Promise.all([
-                    axios.get('http://localhost:8000/api/pagerank/files'),
-                    axios.get('http://localhost:8000/api/pagerank/functions'),
-                    axios.get('http://localhost:8000/api/pagerank/modules')
+                    axios.get('${API_BASE_URL}/api/pagerank/files'),
+                    axios.get('${API_BASE_URL}/api/pagerank/functions'),
+                    axios.get('${API_BASE_URL}/api/pagerank/modules')
                 ]);
 
                 setTopFiles(filesRes.data);

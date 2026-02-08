@@ -63,6 +63,7 @@ class ServerContext:
         self.graph_analyzer: Optional[CodePageRankAnalyzer] = None
         self.conversation_log: List[Dict[str, str]] = []
         self.llm_client: Optional[Groq] = None
+        self.services_initialized: bool = False
         
     def clear_session(self):
         self.repository_root = None
@@ -145,11 +146,18 @@ def build_file_tree(base_path):
 # --- App Lifecycle ---
 @asynccontextmanager
 async def app_lifespan(server: FastAPI):
-    print("Initializing services...")
-    session.llm_client = initialize_llm()
-    Settings.embed_model = initialize_embedder()
+    print("Application startup complete. Heavy services will be lazy-loaded.")
     yield
     print("Services shutting down.")
+    
+def ensure_services():
+    """Lazy load heavy models securely"""
+    if not session.services_initialized:
+        print("Lazy loading AI models...")
+        session.llm_client = initialize_llm()
+        Settings.embed_model = initialize_embedder()
+        session.services_initialized = True
+        print("AI models loaded successfully.")
 
 app = FastAPI(lifespan=app_lifespan)
 
@@ -170,6 +178,7 @@ async def health_check():
 # clone and extract the code from the repository
 @app.post("/api/load_repo")
 async def ingest_repository(payload: RepositoryLoadSchema):
+    ensure_services()
     url = payload.github_url
     user, project = extract_github_segments(url)
     
@@ -177,7 +186,7 @@ async def ingest_repository(payload: RepositoryLoadSchema):
         raise HTTPException(status_code=400, detail="Invalid GitHub URL format.")
         
     try:
-        workspace = Path.home() / "Documents" / "github_repos"
+        workspace = Path(os.getenv("WORKSPACE_DIR", Path.home() / "Documents" / "github_repos"))
         
         # Validate workspace - check write permissions
         try:
@@ -433,6 +442,7 @@ async def generate_graph_data(body: Dict[str, Any] = Body(...)):
 
 @app.post("/api/chat")
 async def process_chat(payload: MessagePayload):
+    ensure_services()
     if not session.search_index:
         raise HTTPException(status_code=400, detail="Repository not loaded")
     
