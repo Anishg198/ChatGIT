@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
 
+import numpy as np
+
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -26,7 +28,7 @@ from groq import Groq
 # GitPython
 from git import Repo, GitCommandError
 
-# Helper Modules
+# Core modules
 from chatgit.core.embeddings import load_embedding_model
 from chatgit.core.ast_parser import generate_repo_ast
 from chatgit.core.chunker import chunk_repository
@@ -34,6 +36,13 @@ from chatgit.core.reranker import rerank
 from chatgit.core.graph.dependency import FunctionDependencyAnalyzer
 from chatgit.core.snippets import ImprovedCodeSnippetExtractor
 from chatgit.core.graph.pagerank import CodePageRankAnalyzer
+
+# ── Novelty modules ────────────────────────────────────────────────────────
+from chatgit.core.git_analyzer import GitVolatilityAnalyzer          # N1
+from chatgit.core.graph.hybrid_importance import HybridImportanceScorer  # N2
+from chatgit.core.session_memory import SessionRetrievalMemory        # N3
+from chatgit.core.intent_classifier import classify_intent            # N4
+# Novelty 5 (bidirectional call-context) is implemented inline below
 
 load_dotenv()
 
@@ -46,11 +55,13 @@ except Exception as e:
     TOKENIZER = None
     print(f"Warning: tiktoken not available ({e})")
 
-# Persistent ChromaDB directory
 CHROMA_DIR = Path(os.getenv("CHROMA_DIR", Path.home() / ".chatgit_cache" / "chroma_db"))
 CHROMA_DIR.mkdir(parents=True, exist_ok=True)
 
-# --- Request/Response Models ---
+# ---------------------------------------------------------------------------
+# Request / Response models
+# ---------------------------------------------------------------------------
+
 class RepositoryLoadSchema(BaseModel):
     github_url: str
 
@@ -64,42 +75,55 @@ class RepoStatistics(BaseModel):
     total_classes: int
     total_packages: int
 
-# --- Global Context ---
+# ---------------------------------------------------------------------------
+# Global server context
+# ---------------------------------------------------------------------------
+
 class ServerContext:
     def __init__(self):
         self.repository_root: Optional[str] = None
-        self.repo_key: Optional[str] = None          # sanitized "user_repo" key
-        self.search_index: Optional[VectorStoreIndex] = None
-        self.code_ast: Optional[Dict[str, Any]] = None
-        self.graph_analyzer: Optional[CodePageRankAnalyzer] = None
+        self.repo_key:        Optional[str] = None
+        self.search_index:    Optional[VectorStoreIndex] = None
+        self.code_ast:        Optional[Dict[str, Any]] = None
+        self.graph_analyzer:  Optional[CodePageRankAnalyzer] = None
         self.conversation_log: List[Dict[str, str]] = []
-        self.llm_client: Optional[Groq] = None
+        self.llm_client:      Optional[Groq] = None
         self.services_initialized: bool = False
-        self.chroma_client: Optional[chromadb.PersistentClient] = None
+        self.chroma_client:   Optional[chromadb.PersistentClient] = None
+
+        # ── Novelty instances ──────────────────────────────────────────
+        self.git_analyzer:    Optional[GitVolatilityAnalyzer] = None   # N1
+        self.hybrid_scorer:   Optional[HybridImportanceScorer] = None  # N2
+        self.retrieval_memory: SessionRetrievalMemory = SessionRetrievalMemory()  # N3
 
     def clear_session(self):
         self.repository_root = None
-        self.repo_key = None
-        self.search_index = None
-        self.code_ast = None
-        self.graph_analyzer = None
+        self.repo_key        = None
+        self.search_index    = None
+        self.code_ast        = None
+        self.graph_analyzer  = None
         self.conversation_log = []
+        self.git_analyzer    = None
+        self.hybrid_scorer   = None
+        self.retrieval_memory.reset()           # N3: reset retrieval memory
 
 session = ServerContext()
 
-# --- Utilities ---
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
+
 def initialize_llm():
     key = os.getenv("GROQ_API_KEY")
     if not key:
-        print("ERROR: GROQ_API_KEY not found in environment variables!")
+        print("ERROR: GROQ_API_KEY not found!")
         return None
     try:
-        print(f"GROQ_API_KEY loaded ({len(key)} chars)")
         client = Groq(api_key=key)
         print("Groq client initialized")
         return client
     except Exception as e:
-        print(f"ERROR: Failed to initialize Groq client: {e}")
+        print(f"ERROR: Failed to initialize Groq: {e}")
         return None
 
 def initialize_embedder():
@@ -107,32 +131,28 @@ def initialize_embedder():
     return LangchainEmbedding(model)
 
 def ensure_services():
-    """Lazy-load heavy models on first use."""
     if not session.services_initialized:
         print("Lazy loading AI models...")
-        session.llm_client = initialize_llm()
+        session.llm_client  = initialize_llm()
         Settings.embed_model = initialize_embedder()
         session.chroma_client = chromadb.PersistentClient(path=str(CHROMA_DIR))
         session.services_initialized = True
         print("AI models loaded.")
 
 def sanitize_collection_name(name: str) -> str:
-    """Sanitize a string for use as a ChromaDB collection name (3-63 chars, alphanumeric + underscores)."""
     sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
     sanitized = re.sub(r'_+', '_', sanitized).strip('_')
     if len(sanitized) < 3:
-        sanitized = sanitized + "_repo"
+        sanitized += "_repo"
     return sanitized[:63]
 
 def determine_temperature(query: str) -> float:
-    query_lower = query.lower()
-    creative_kw = ['explain', 'how', 'why', 'what if', 'suggest', 'recommend',
-                   'describe', 'compare', 'difference between', 'best way']
-    factual_kw = ['find', 'show', 'where', 'which file', 'locate',
-                  'what does', 'list', 'get']
-    if any(k in query_lower for k in creative_kw):
+    q = query.lower()
+    if any(k in q for k in ['explain', 'how', 'why', 'what if', 'suggest',
+                              'recommend', 'describe', 'compare', 'best way']):
         return 0.3
-    elif any(k in query_lower for k in factual_kw):
+    if any(k in q for k in ['find', 'show', 'where', 'which file', 'locate',
+                              'what does', 'list', 'get']):
         return 0.1
     return 0.2
 
@@ -160,7 +180,92 @@ def _count_tokens(text: str) -> int:
         return int(len(TOKENIZER.encode(text)) * 1.2)
     return len(text) // 3
 
-# --- App Lifecycle ---
+def _is_recency_focused(query: str) -> bool:
+    """Detect queries asking about recent changes (Novelty 1)."""
+    kw = ['recent', 'changed', 'latest', 'updated', 'new', 'last commit',
+          'what changed', 'modification', 'modified']
+    q = query.lower()
+    return any(k in q for k in kw)
+
+# ---------------------------------------------------------------------------
+# Novelty 5: Bidirectional call-context neighborhood builder
+# ---------------------------------------------------------------------------
+
+def _build_neighborhood_context(
+    diverse_results: List[dict],
+    analyzer: Optional[CodePageRankAnalyzer],
+    repo_root: str,
+    max_neighbors: int = 2,
+    max_lines: int = 40,
+) -> str:
+    """
+    For each retrieved function, pull its immediate callers and callees
+    from the call graph and include a brief code excerpt as auxiliary context.
+
+    This gives the LLM execution-context (how a function is called AND what
+    it calls), drastically reducing hallucination on relational questions.
+    """
+    if not analyzer or not repo_root:
+        return ""
+
+    seen_nodes: set = set()
+    blocks: List[str] = []
+
+    for res in diverse_results[:4]:   # limit neighbourhood expansion to top-4
+        meta  = res["snippet"].metadata
+        fname = meta.get("file_name", "")
+        fn_names = res.get("matched_funcs", [])
+
+        for fn_name in fn_names[:2]:
+            qname = f"{fname}::{fn_name}"
+            if qname not in analyzer.function_graph:
+                continue
+
+            callers = list(analyzer.function_graph.predecessors(qname))[:max_neighbors]
+            callees = list(analyzer.function_graph.successors(qname))[:max_neighbors]
+
+            for neighbor_qname in callers + callees:
+                if neighbor_qname in seen_nodes:
+                    continue
+                seen_nodes.add(neighbor_qname)
+
+                parts = neighbor_qname.split("::")
+                if len(parts) != 2:
+                    continue
+                nb_file, nb_func = parts
+                direction = "caller" if neighbor_qname in callers else "callee"
+
+                # Try to read a short excerpt from the actual file
+                full_path = Path(repo_root) / nb_file
+                excerpt = ""
+                if full_path.exists():
+                    try:
+                        nb_info = analyzer.function_info.get(neighbor_qname, {})
+                        start_ln = nb_info.get("line", 1)
+                        with open(full_path, "r", encoding="utf-8", errors="ignore") as fh:
+                            all_lines = fh.readlines()
+                        excerpt_lines = all_lines[start_ln - 1: start_ln - 1 + max_lines]
+                        excerpt = "".join(excerpt_lines)
+                    except Exception:
+                        pass
+
+                if excerpt:
+                    label = "calls" if direction == "callee" else "called by"
+                    blocks.append(
+                        f"**`{fn_name}` {label} `{nb_func}` "
+                        f"({nb_file}, line {analyzer.function_info.get(neighbor_qname,{}).get('line','?')})**\n"
+                        f"```\n{excerpt[:600]}\n```"
+                    )
+
+    if not blocks:
+        return ""
+    return "\n\n### Call Neighborhood (Novelty: Bidirectional Context)\n" + "\n\n".join(blocks)
+
+
+# ---------------------------------------------------------------------------
+# App lifecycle
+# ---------------------------------------------------------------------------
+
 @asynccontextmanager
 async def app_lifespan(server):
     print("Application startup complete. Models are lazy-loaded on first use.")
@@ -177,11 +282,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Endpoints ---
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
 @app.get("/api/health")
 async def health_check():
     return {"status": "active"}
+
 
 @app.post("/api/load_repo")
 async def ingest_repository(payload: RepositoryLoadSchema):
@@ -212,81 +320,82 @@ async def ingest_repository(payload: RepositoryLoadSchema):
         already_up_to_date = False
 
         if not target_path.exists():
-            print(f"Cloning {url} via GitPython...")
+            print(f"Cloning {url}...")
             Repo.clone_from(url, str(target_path))
-            print("Clone complete.")
         else:
-            print(f"Repository exists. Pulling latest changes...")
+            print("Repository exists. Pulling latest changes...")
             try:
                 repo = Repo(str(target_path))
                 pull_result = repo.remotes.origin.pull()
                 fetch_info = pull_result[0] if pull_result else None
-                # flags=4 means ALREADY_UP_TO_DATE in GitPython
                 already_up_to_date = (fetch_info is not None and fetch_info.flags == 4)
-                if already_up_to_date:
-                    print("Repository already up to date.")
-                else:
-                    print("Repository updated with latest changes.")
+                print("Up to date." if already_up_to_date else "Updated.")
             except GitCommandError as e:
-                print(f"Warning: Git pull failed: {e}. Using existing local version.")
-                already_up_to_date = True  # treat as up-to-date to reuse index
+                print(f"Warning: git pull failed: {e}. Using local version.")
+                already_up_to_date = True
 
-        # Build a stable collection key
         repo_key = sanitize_collection_name(f"{user}_{project}")
 
-        # Decide whether to reuse existing ChromaDB collection
         chroma_collection = session.chroma_client.get_or_create_collection(
-            name=repo_key,
-            metadata={"hnsw:space": "cosine"}
+            name=repo_key, metadata={"hnsw:space": "cosine"}
         )
         reuse_index = already_up_to_date and chroma_collection.count() > 0
-        ast_data = None  # will be set during indexing or below
+        ast_data = None
 
         if reuse_index:
-            print(f"Reusing existing vector index for '{repo_key}' ({chroma_collection.count()} chunks).")
+            print(f"Reusing existing vector index ({chroma_collection.count()} chunks).")
             vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-            vector_db = VectorStoreIndex.from_vector_store(vector_store)
+            vector_db    = VectorStoreIndex.from_vector_store(vector_store)
         else:
             if chroma_collection.count() > 0:
-                print(f"Rebuilding index for '{repo_key}' (repo was updated)...")
+                print("Rebuilding index (repo updated)...")
                 session.chroma_client.delete_collection(repo_key)
                 chroma_collection = session.chroma_client.get_or_create_collection(
-                    name=repo_key,
-                    metadata={"hnsw:space": "cosine"}
+                    name=repo_key, metadata={"hnsw:space": "cosine"}
                 )
 
             print("Token-aware AST chunking...")
             documents = chunk_repository(str(target_path))
 
-            # Add file-tree and overview docs
             tree_text = build_file_tree(target_path)
             documents.append(Document(
                 text=tree_text,
                 metadata={"file_name": "STRUCTURE.md", "node_type": "meta",
-                          "node_name": "file_tree", "start_line": 1, "end_line": 0, "chunk_index": 0}
+                          "node_name": "file_tree", "start_line": 1,
+                          "end_line": 0, "chunk_index": 0}
             ))
 
             print("Parsing AST...")
             ast_data = generate_repo_ast(str(target_path))
-            stats = ast_data.get('stats', {})
-            func_list = "\n".join([f"- {fn['name']} ({fn['file']})" for fn in ast_data.get('functions', [])[:50]])
-            class_list = "\n".join([f"- {cl['name']} ({cl['file']})" for cl in ast_data.get('classes', [])[:50]])
-            overview_text = f"""# Codebase Overview\n\n**Metrics:**\n- Files: {stats.get('total_files',0)}\n- Functions: {stats.get('total_functions',0)}\n- Classes: {stats.get('total_classes',0)}\n- Packages: {stats.get('total_packages',0)}\n\n**Key Functions:**\n{func_list}\n\n**Key Classes:**\n{class_list}\n"""
+            stats    = ast_data.get("stats", {})
+            func_list = "\n".join(
+                [f"- {fn['name']} ({fn['file']})" for fn in ast_data.get("functions", [])[:50]]
+            )
+            class_list = "\n".join(
+                [f"- {cl['name']} ({cl['file']})" for cl in ast_data.get("classes", [])[:50]]
+            )
+            overview_text = (
+                f"# Codebase Overview\n\n**Metrics:**\n"
+                f"- Files: {stats.get('total_files',0)}\n"
+                f"- Functions: {stats.get('total_functions',0)}\n"
+                f"- Classes: {stats.get('total_classes',0)}\n"
+                f"- Packages: {stats.get('total_packages',0)}\n\n"
+                f"**Key Functions:**\n{func_list}\n\n**Key Classes:**\n{class_list}\n"
+            )
             documents.append(Document(
                 text=overview_text,
                 metadata={"file_name": "OVERVIEW.md", "node_type": "meta",
-                          "node_name": "overview", "start_line": 1, "end_line": 0, "chunk_index": 0}
+                          "node_name": "overview", "start_line": 1,
+                          "end_line": 0, "chunk_index": 0}
             ))
 
             print("Building vector index (ChromaDB)...")
-            vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+            vector_store    = ChromaVectorStore(chroma_collection=chroma_collection)
             storage_context = StorageContext.from_defaults(vector_store=vector_store)
             vector_db = VectorStoreIndex.from_documents(
-                documents,
-                storage_context=storage_context,
-                show_progress=True
+                documents, storage_context=storage_context, show_progress=True
             )
-            print(f"Indexed {len(documents)} chunks into ChromaDB collection '{repo_key}'.")
+            print(f"Indexed {len(documents)} chunks.")
 
         print("Running PageRank analysis...")
         if ast_data is None:
@@ -294,11 +403,26 @@ async def ingest_repository(payload: RepositoryLoadSchema):
         pagerank = CodePageRankAnalyzer()
         pagerank.analyze_repository(str(target_path))
 
+        # ── Novelty 1: git volatility analysis ──────────────────────────
+        print("Running git volatility analysis (Novelty 1)...")
+        git_analyzer = GitVolatilityAnalyzer()
+        git_analyzer.analyze(str(target_path))
+
+        # ── Novelty 2: build hybrid importance scorer ────────────────────
+        print("Building hybrid importance scorer (Novelty 2)...")
+        func_pr_dict = dict(pagerank.get_function_pagerank())
+        hybrid_scorer = HybridImportanceScorer(pagerank.function_graph)
+        hybrid_scorer.build(func_pr_dict, Settings.embed_model)
+
+        # ── Commit to session ────────────────────────────────────────────
         session.repository_root = str(target_path)
-        session.repo_key = repo_key
-        session.code_ast = ast_data
-        session.graph_analyzer = pagerank
-        session.search_index = vector_db
+        session.repo_key        = repo_key
+        session.code_ast        = ast_data
+        session.graph_analyzer  = pagerank
+        session.search_index    = vector_db
+        session.git_analyzer    = git_analyzer       # N1
+        session.hybrid_scorer   = hybrid_scorer      # N2
+        session.retrieval_memory.reset()             # N3: fresh memory per repo
         session.conversation_log = []
 
         return {"status": "success", "message": f"Loaded {project}", "repo_name": project}
@@ -326,13 +450,13 @@ async def reset_session():
 async def fetch_statistics():
     if not session.code_ast:
         return {}
-    return session.code_ast.get('stats', {})
+    return session.code_ast.get("stats", {})
 
 @app.get("/api/structure")
 async def fetch_structure():
     if not session.code_ast:
         return {"files": {}}
-    return session.code_ast.get('files', {})
+    return session.code_ast.get("files", {})
 
 @app.get("/api/pagerank/files")
 async def get_top_files():
@@ -350,11 +474,11 @@ async def get_network_metrics():
     if not session.graph_analyzer:
         return {"hubs": [], "authorities": []}
     try:
-        hubs = session.graph_analyzer.get_hub_files(10)
+        hubs  = session.graph_analyzer.get_hub_files(10)
         auths = session.graph_analyzer.get_authority_files(10)
         return {
-            "hubs": [{"name": f, "count": c} for f, c in hubs if c > 0],
-            "authorities": [{"name": f, "count": c} for f, c in auths if c > 0]
+            "hubs":        [{"name": f, "count": c} for f, c in hubs  if c > 0],
+            "authorities": [{"name": f, "count": c} for f, c in auths if c > 0],
         }
     except Exception as e:
         print(f"[API] Error in get_network_metrics: {e}")
@@ -379,11 +503,10 @@ async def get_module_importance():
     if not session.graph_analyzer:
         return []
     items = session.graph_analyzer.get_import_pagerank()[:10]
-    return [{"name": m, "score": s, "is_local": m.endswith('.py')} for m, s in items]
+    return [{"name": m, "score": s, "is_local": m.endswith(".py")} for m, s in items]
 
 @app.get("/api/call_graph")
 async def retrieve_call_graph(target_function: Optional[str] = None):
-    """Return list of all function nodes from the cached PageRank graph."""
     if not session.graph_analyzer:
         return {"error": "No repo loaded"}
     try:
@@ -394,7 +517,6 @@ async def retrieve_call_graph(target_function: Optional[str] = None):
 
 @app.post("/api/call_graph/visualize")
 async def generate_graph_data(body: Dict[str, Any] = Body(...)):
-    """Return call graph nodes/edges using the cached PageRank function graph."""
     if not session.graph_analyzer:
         return {"error": "No repo loaded"}
 
@@ -404,26 +526,23 @@ async def generate_graph_data(body: Dict[str, Any] = Body(...)):
 
     try:
         fg = session.graph_analyzer.function_graph
-
         node_list = [{"id": n, "label": n.split("::")[-1]} for n in fg.nodes()]
         edge_list = [{"source": u, "target": v} for u, v in fg.edges()]
 
         meta = {}
         if focus:
-            # Support both qualified ("file::func") and short names
             if "::" not in focus:
-                # Try to find a matching qualified name
                 candidates = [n for n in fg.nodes() if n.endswith(f"::{focus}")]
                 focus_qualified = candidates[0] if candidates else focus
             else:
                 focus_qualified = focus
 
-            deps = list(fg.successors(focus_qualified)) if focus_qualified in fg else []
+            deps    = list(fg.successors(focus_qualified))   if focus_qualified in fg else []
             callers = list(fg.predecessors(focus_qualified)) if focus_qualified in fg else []
             meta = {
-                "target": focus_qualified,
+                "target":       focus_qualified,
                 "dependencies": [d.split("::")[-1] for d in deps[:10]],
-                "callers": [c.split("::")[-1] for c in callers[:10]]
+                "callers":      [c.split("::")[-1] for c in callers[:10]],
             }
 
         return {"nodes": node_list, "edges": edge_list, "details": meta}
@@ -432,116 +551,191 @@ async def generate_graph_data(body: Dict[str, Any] = Body(...)):
         return {"error": str(e)}
 
 
+# ---------------------------------------------------------------------------
+# Chat endpoint — all 5 novelties integrated
+# ---------------------------------------------------------------------------
+
 @app.post("/api/chat")
 async def process_chat(payload: MessagePayload):
     ensure_services()
     if not session.search_index:
         raise HTTPException(status_code=400, detail="Repository not loaded")
 
-    query = payload.message
-    session.conversation_log.append({"role": "user", "content": query})
+    raw_query = payload.message
+    session.conversation_log.append({"role": "user", "content": raw_query})
 
     try:
-        # -- Step 1: Retrieve top-k candidates --
-        retriever = session.search_index.as_retriever(similarity_top_k=20)
-        results = retriever.retrieve(query)
+        analyzer  = session.graph_analyzer
+        ast_data  = session.code_ast
 
-        # -- Step 2: Score candidates (vector score x PageRank boost) --
-        analyzer = session.graph_analyzer
-        ast_data = session.code_ast
+        # ── Novelty 3: co-reference resolution ──────────────────────────
+        query = session.retrieval_memory.resolve_coreferences(raw_query)
+        if query != raw_query:
+            print(f"[SessionMemory] Resolved query: {query}")
 
-        file_pr_map = dict(analyzer.get_file_pagerank()) if analyzer else {}
-        func_pr_map = dict(analyzer.get_function_pagerank()) if analyzer else {}
+        # ── Novelty 4: classify intent → retrieval config ────────────────
+        cfg = classify_intent(query)
+        print(f"[IntentClassifier] Intent={cfg.intent}, top_k={cfg.top_k}, "
+              f"granularity={cfg.granularity}, neighbourhood={cfg.include_neighborhood}")
 
-        candidates = []
+        # ── Step 1: vector search with intent-based top-k ────────────────
+        retriever = session.search_index.as_retriever(similarity_top_k=cfg.top_k)
+        results   = retriever.retrieve(query)
+
+        # ── Novelty 2: get query embedding for hybrid scoring ─────────────
+        query_emb = np.array(Settings.embed_model.get_text_embedding(query))
+
+        # Pre-compute hybrid scores for all nodes (query-conditioned)
+        hybrid_scores: Dict[str, float] = {}
+        if session.hybrid_scorer and session.hybrid_scorer._built:
+            hybrid_scores = session.hybrid_scorer.score_all(query, query_emb)
+            print(f"[HybridScorer] Computed {len(hybrid_scores)} node scores.")
+
+        # ── Novelty 1: check if query is recency-focused ──────────────────
+        recency_focused = _is_recency_focused(query)
+
+        # PageRank maps (used as fallback / file-level signal)
+        file_pr_map = dict(analyzer.get_file_pagerank())    if analyzer else {}
+
+        # ── Step 2: score candidates ─────────────────────────────────────
+        candidates       = []
         context_metadata = {}
 
         for item in results:
-            fname = item.metadata.get('file_name', 'unknown')
-            content = item.text
+            fname    = item.metadata.get("file_name", "unknown")
+            content  = item.text
             base_score = item.score if item.score else 1.0
 
             matched_funcs = []
-            func_score = 0.0
+            node_hybrid   = 0.0
             related_funcs = []
 
-            if ast_data and fname.endswith(('.py', '.js', '.ts', '.java', '.cpp')):
-                file_funcs = [f for f in ast_data.get('functions', []) if f['file'] == fname]
+            if ast_data and fname.endswith((".py", ".js", ".ts", ".java", ".cpp")):
+                file_funcs = [f for f in ast_data.get("functions", []) if f["file"] == fname]
                 for f in file_funcs:
-                    func_name = f['name']
-                    if re.search(r'\b' + re.escape(func_name) + r'\b', content):
-                        matched_funcs.append(func_name)
-                        pr_key = f"{fname}::{func_name}"
-                        func_score = max(func_score, func_pr_map.get(pr_key, 0))
-                        if analyzer and pr_key in analyzer.function_graph:
-                            succs = list(analyzer.function_graph.successors(pr_key))[:3]
-                            preds = list(analyzer.function_graph.predecessors(pr_key))[:3]
-                            related_funcs.extend([s.split('::')[-1] for s in succs])
-                            related_funcs.extend([p.split('::')[-1] for p in preds])
+                    fn_name = f["name"]
+                    if re.search(r'\b' + re.escape(fn_name) + r'\b', content):
+                        matched_funcs.append(fn_name)
+                        qname = f"{fname}::{fn_name}"
 
-            pr_value = func_score if matched_funcs else file_pr_map.get(fname, 0)
-            final_score = base_score * (1 + pr_value * 10)
+                        # Novelty 2: use hybrid score instead of raw PageRank
+                        h = hybrid_scores.get(qname, 0.0)
+                        node_hybrid = max(node_hybrid, h)
+
+                        if analyzer and qname in analyzer.function_graph:
+                            succs = list(analyzer.function_graph.successors(qname))[:3]
+                            preds = list(analyzer.function_graph.predecessors(qname))[:3]
+                            related_funcs.extend([s.split("::")[-1] for s in succs])
+                            related_funcs.extend([p.split("::")[-1] for p in preds])
+
+            # Fall back to file-level PageRank if no function matched
+            if not matched_funcs:
+                node_hybrid = file_pr_map.get(fname, 0.0)
+
+            # Novelty 1: apply git volatility weight
+            vol_weight = 1.0
+            if session.git_analyzer:
+                vol_weight = session.git_analyzer.get_retrieval_weight(
+                    fname, recency_focused=recency_focused
+                )
+
+            # Novelty 2: hybrid boost (replaces plain pagerank * 10)
+            final_score = base_score * (1.0 + node_hybrid * 10.0) * vol_weight
+
+            # Novelty 4: granularity-adaptive boost ──────────────────────
+            node_type = item.metadata.get("node_type", "")
+            if cfg.granularity == "module" and node_type == "module_summary":
+                final_score *= cfg.granularity_boost
+            elif cfg.granularity == "statement":
+                # Prefer smaller chunks (few lines = statement level)
+                chunk_lines = (item.metadata.get("end_line", 0)
+                               - item.metadata.get("start_line", 0))
+                if 0 < chunk_lines <= 10:
+                    final_score *= cfg.granularity_boost
+            elif cfg.granularity == "function" and node_type == "function":
+                final_score *= cfg.granularity_boost
+            # debug / mixed: no specific boost
 
             candidates.append({
-                "snippet": item,
-                "score": final_score,
-                "pr_value": pr_value,
+                "snippet":       item,
+                "score":         final_score,
                 "matched_funcs": matched_funcs,
-                "related": list(set(related_funcs)),
+                "related":       list(set(related_funcs)),
+                "hybrid_score":  node_hybrid,
+                "vol_weight":    vol_weight,
             })
 
             if fname not in context_metadata:
                 context_metadata[fname] = {
-                    'functions': matched_funcs,
-                    'pagerank': file_pr_map.get(fname, 0)
+                    "functions": matched_funcs,
+                    "pagerank":  file_pr_map.get(fname, 0),
                 }
 
-        # Sort by heuristic score before feeding to cross-encoder
         candidates.sort(key=lambda x: x["score"], reverse=True)
 
-        # -- Step 3: Cross-encoder reranking --
-        top_results = rerank(query, candidates, top_n=8)
+        # ── Novelty 3: apply session memory scores ────────────────────────
+        candidates = session.retrieval_memory.apply_session_scores(candidates)
+        # Re-sort after session adjustments
+        candidates.sort(key=lambda x: x["score"], reverse=True)
 
-        # -- Step 4: File-diversity cap (max 3 chunks per file) --
-        diverse_results = []
-        file_count: Dict[str, int] = {}
+        # ── Step 3: cross-encoder reranking (intent-based rerank_n) ──────
+        top_results = rerank(query, candidates, top_n=cfg.rerank_n)
+
+        # ── Step 4: file-diversity cap (intent-based max_per_file) ───────
+        diverse_results: List[dict] = []
+        file_count: Dict[str, int]  = {}
         for res in top_results:
-            fname = res['snippet'].metadata.get('file_name', 'unknown')
-            if file_count.get(fname, 0) < 3:
+            fname = res["snippet"].metadata.get("file_name", "unknown")
+            if file_count.get(fname, 0) < cfg.max_per_file:
                 diverse_results.append(res)
                 file_count[fname] = file_count.get(fname, 0) + 1
 
-        # -- Step 5: Build context with token budget --
+        # ── Novelty 5: bidirectional call-context neighborhood ────────────
+        neighborhood_ctx = ""
+        if cfg.include_neighborhood:
+            neighborhood_ctx = _build_neighborhood_context(
+                diverse_results, analyzer, session.repository_root or ""
+            )
+            if neighborhood_ctx:
+                print("[CallNeighbour] Added bidirectional call context.")
+
+        # ── Step 5: build context block with token budget ─────────────────
         by_file: Dict[str, list] = {}
         for res in diverse_results:
-            fname = res['snippet'].metadata.get('file_name', 'unknown')
+            fname = res["snippet"].metadata.get("file_name", "unknown")
             by_file.setdefault(fname, []).append(res)
 
         context_blocks = []
-        token_count = 0
-        token_limit = 6000
+        token_count    = 0
 
         for fname, file_results in by_file.items():
             file_block = [f"### File: `{fname}`"]
-            file_pr = file_pr_map.get(fname, 0)
+            file_pr    = file_pr_map.get(fname, 0)
             if file_pr > 0.01:
                 file_block.append(f"**PageRank Score:** {file_pr:.4f}")
 
+            # Novelty 1: show volatility info if relevant
+            if session.git_analyzer and session.git_analyzer._analyzed:
+                vol = session.git_analyzer.get_volatility_score(fname)
+                if vol > 0.3:
+                    file_block.append(f"**Volatility Score:** {vol:.2f} (actively modified)")
+
             for res in file_results:
-                content = res['snippet'].text
-                # Include line range from metadata if available
-                meta = res['snippet'].metadata
+                content = res["snippet"].text
+                meta    = res["snippet"].metadata
                 line_info = ""
-                if meta.get('start_line') and meta.get('end_line'):
+                if meta.get("start_line") and meta.get("end_line"):
                     line_info = f" (Lines {meta['start_line']}-{meta['end_line']})"
 
                 meta_parts = []
-                if res['matched_funcs']:
+                if res["matched_funcs"]:
                     meta_parts.append(f"Functions: {', '.join(res['matched_funcs'])}")
-                if res['related']:
+                if res["related"]:
                     meta_parts.append(f"Calls: {', '.join(res['related'][:5])}")
-                if meta.get('node_name') and meta.get('node_type') not in ('meta', 'module'):
-                    meta_parts.append(f"{meta.get('node_type','').capitalize()}: {meta.get('node_name','')}")
+                if meta.get("node_name") and meta.get("node_type") not in ("meta", "module"):
+                    meta_parts.append(
+                        f"{meta.get('node_type','').capitalize()}: {meta.get('node_name','')}"
+                    )
 
                 if meta_parts:
                     file_block.append(f"\n**{' | '.join(meta_parts)}{line_info}**")
@@ -552,7 +746,7 @@ async def process_chat(payload: MessagePayload):
 
             block_text = "\n".join(file_block)
             est = _count_tokens(block_text)
-            if token_count + est < token_limit:
+            if token_count + est < cfg.token_budget:
                 context_blocks.append(block_text)
                 token_count += est
             else:
@@ -560,27 +754,30 @@ async def process_chat(payload: MessagePayload):
 
         context_block = "\n\n---\n\n".join(context_blocks)
 
-        # -- Step 6: Build prompt with conversation history --
-        ast = session.code_ast
-        stats = ast.get('stats', {}) if ast else {}
+        # Append call-neighbourhood context (Novelty 5)
+        if neighborhood_ctx:
+            context_block += neighborhood_ctx
 
-        file_index = "\n".join([
-            f"- `{fname}`: {len(items)} snippet(s)"
-            for fname, items in by_file.items()
-        ])
+        # ── Step 6: build prompt ─────────────────────────────────────────
+        stats = (session.code_ast or {}).get("stats", {})
 
-        # Include last 3 turns (6 messages) of history for context
-        history_turns = session.conversation_log[:-1]  # exclude current user message
+        file_index = "\n".join(
+            [f"- `{fname}`: {len(items)} snippet(s)" for fname, items in by_file.items()]
+        )
+
+        history_turns = session.conversation_log[:-1]
         recent_history = history_turns[-6:] if len(history_turns) > 6 else history_turns
         history_block = ""
         if recent_history:
             history_lines = []
             for msg in recent_history:
-                role = "User" if msg["role"] == "user" else "Assistant"
-                # Truncate long history messages
-                content_preview = msg["content"][:500] + "..." if len(msg["content"]) > 500 else msg["content"]
-                history_lines.append(f"**{role}:** {content_preview}")
+                role    = "User" if msg["role"] == "user" else "Assistant"
+                preview = msg["content"][:500] + "..." if len(msg["content"]) > 500 else msg["content"]
+                history_lines.append(f"**{role}:** {preview}")
             history_block = "\n\n## Conversation History\n" + "\n\n".join(history_lines)
+
+        # Novelty 3: session summary in the prompt
+        session_summary = session.retrieval_memory.get_session_summary()
 
         final_prompt = f"""You are ChatGIT, an expert code analysis assistant.
 
@@ -592,12 +789,15 @@ async def process_chat(payload: MessagePayload):
 - Total Classes: {stats.get('total_classes', 0)}
 - Total Packages: {stats.get('total_packages', 0)}
 
-## Retrieved Files (Ranked by Relevance + PageRank + Cross-Encoder)
+## Retrieval Intent: {cfg.intent.upper()} (granularity: {cfg.granularity})
+
+## Retrieved Files (Ranked by Hybrid Importance + Cross-Encoder)
 {file_index}
 
 ## Code Snippets
 {context_block}
 {history_block}
+{session_summary}
 
 # Current Query
 {query}
@@ -607,21 +807,22 @@ async def process_chat(payload: MessagePayload):
 2. Always specify the exact filename when referencing code.
 3. Include line numbers when available.
 4. If prior conversation is relevant, refer to it naturally.
-5. If information is incomplete, say so - do not hallucinate.
+5. If information is incomplete, say so — do not hallucinate.
 6. Use code blocks with the correct language tag.
 
 Answer:"""
 
-        # -- Step 7: LLM inference --
+        # ── Step 7: LLM inference ────────────────────────────────────────
         chat_messages = [
             {
                 "role": "system",
-                "content": "You are ChatGIT, an expert code assistant. Always cite exact filenames and line numbers. Be precise and grounded in the provided code."
+                "content": (
+                    "You are ChatGIT, an expert code assistant. "
+                    "Always cite exact filenames and line numbers. "
+                    "Be precise and grounded in the provided code."
+                ),
             },
-            {
-                "role": "user",
-                "content": final_prompt
-            }
+            {"role": "user", "content": final_prompt},
         ]
 
         temp = determine_temperature(query)
@@ -630,30 +831,45 @@ Answer:"""
             messages=chat_messages,
             temperature=temp,
             max_tokens=2048,
-            stream=False
+            stream=False,
         )
-
         answer = completion.choices[0].message.content
 
-        # -- Step 8: Enhance with precise line numbers --
+        # ── Step 8: enhance with precise line numbers ────────────────────
         if payload.enhance_code and session.repository_root:
             try:
                 enhancer = ImprovedCodeSnippetExtractor(session.repository_root)
-                answer = enhancer.enhance_response(answer, session.repository_root,
-                                                   context_metadata=context_metadata)
+                answer   = enhancer.enhance_response(
+                    answer, session.repository_root, context_metadata=context_metadata
+                )
             except Exception as e:
                 print(f"Enhancement failed: {e}")
 
         session.conversation_log.append({"role": "assistant", "content": answer})
 
+        # ── Novelty 3: update retrieval memory ───────────────────────────
+        retrieved_info = [
+            {
+                "file":         r["snippet"].metadata.get("file_name", ""),
+                "node_name":    r["snippet"].metadata.get("node_name", ""),
+                "matched_funcs": r.get("matched_funcs", []),
+            }
+            for r in diverse_results
+        ]
+        session.retrieval_memory.record_turn(raw_query, retrieved_info, answer)
+
         return {
             "response": answer,
-            "history": session.conversation_log,
+            "history":  session.conversation_log,
             "metadata": {
-                "files_used": list(by_file.keys()),
-                "total_snippets": len(diverse_results),
-                "reranked": True,
-            }
+                "files_used":      list(by_file.keys()),
+                "total_snippets":  len(diverse_results),
+                "reranked":        True,
+                "intent":          cfg.intent,             # N4
+                "granularity":     cfg.granularity,        # N4
+                "session_turn":    session.retrieval_memory.turn,  # N3
+                "neighbourhood":   bool(neighborhood_ctx), # N5
+            },
         }
 
     except Exception as err:

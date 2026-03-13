@@ -12,7 +12,7 @@ import ast
 import os
 import re
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from llama_index.core import Document
 
@@ -107,6 +107,42 @@ def _split_lines_into_chunks(
     return chunks
 
 
+def _make_module_summary(relative_path: str, functions: List[str],
+                         classes: List[str], imports: List[str]) -> Optional[Document]:
+    """
+    Generate a module-level summary Document for a source file.
+    Stored with node_type='module_summary' — boosted by the SUMMARIZE intent.
+    """
+    if not functions and not classes:
+        return None
+
+    parts = [f"# Module Summary: {relative_path}"]
+    if functions:
+        parts.append(
+            f"## Functions ({len(functions)})\n"
+            + "\n".join(f"- {f}" for f in functions[:40])
+        )
+    if classes:
+        parts.append(
+            "## Classes\n" + "\n".join(f"- {c}" for c in classes[:20])
+        )
+    if imports:
+        unique_imports = list(dict.fromkeys(imports))[:20]
+        parts.append("## Imports\n" + "\n".join(f"- {i}" for i in unique_imports))
+
+    return Document(
+        text="\n\n".join(parts),
+        metadata={
+            "file_name": relative_path,
+            "start_line": 1,
+            "end_line": 0,
+            "node_type": "module_summary",
+            "node_name": f"{Path(relative_path).stem}_summary",
+            "chunk_index": 0,
+        },
+    )
+
+
 def chunk_python_file(file_path: str, relative_path: str) -> List[Document]:
     """Chunk a Python file using the AST for semantic boundaries."""
     try:
@@ -122,6 +158,10 @@ def chunk_python_file(file_path: str, relative_path: str) -> List[Document]:
     all_lines = source.splitlines(keepends=True)
     chunks: List[Document] = []
     covered: set = set()
+
+    fn_names:  List[str] = []
+    cls_names: List[str] = []
+    imports:   List[str] = []
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -142,6 +182,19 @@ def chunk_python_file(file_path: str, relative_path: str) -> List[Document]:
             chunks.extend(node_chunks)
             covered.update(range(start_idx, end_idx))
 
+            if isinstance(node, ast.ClassDef):
+                cls_names.append(node.name)
+            else:
+                doc = ast.get_docstring(node) or ""
+                first_doc = doc.split("\n")[0][:80] if doc else ""
+                fn_names.append(f"{node.name}(): {first_doc}" if first_doc else node.name)
+
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.append(alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.append(node.module)
+
     # Module-level code not inside any function/class
     module_lines = [(i, l) for i, l in enumerate(all_lines) if i not in covered]
     if module_lines:
@@ -155,6 +208,11 @@ def chunk_python_file(file_path: str, relative_path: str) -> List[Document]:
             node_name="module_level",
         )
         chunks.extend(module_chunks)
+
+    # Novelty 4: append module-level summary chunk
+    summary = _make_module_summary(relative_path, fn_names, cls_names, imports)
+    if summary:
+        chunks.append(summary)
 
     return chunks
 
@@ -231,6 +289,8 @@ def chunk_generic_file(file_path: str, relative_path: str) -> List[Document]:
         )
 
     chunks: List[Document] = []
+    fn_names: List[str] = []
+
     for i, func in enumerate(functions):
         start_line = func['line']
         end_line = functions[i + 1]['line'] - 1 if i + 1 < len(functions) else len(all_lines)
@@ -243,6 +303,12 @@ def chunk_generic_file(file_path: str, relative_path: str) -> List[Document]:
             node_name=func['name'],
         )
         chunks.extend(func_chunks)
+        fn_names.append(func['name'])
+
+    # Novelty 4: append module-level summary chunk
+    summary = _make_module_summary(relative_path, fn_names, [], [])
+    if summary:
+        chunks.append(summary)
 
     return chunks
 
