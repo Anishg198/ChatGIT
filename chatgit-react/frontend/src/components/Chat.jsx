@@ -3,122 +3,168 @@ import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+const TypingIndicator = () => (
+  <div className="message assistant" style={{ animationDelay: '0s' }}>
+    <div className="msg-label">
+      <span className="msg-label-dot" />
+      ChatGIT
+    </div>
+    <div className="typing-indicator">
+      <div className="typing-dot" />
+      <div className="typing-dot" />
+      <div className="typing-dot" />
+    </div>
+  </div>
+);
+
+const lineNumberRegex = /^\s*(\d+)\s*\|\s*/;
+
+const CodeBlock = ({ className, children }) => {
+  const langMatch = /language-(\w+)/.exec(className || '');
+  const raw = String(children).replace(/\n$/, '');
+
+  let startLine = 1;
+  let code = raw;
+  if (lineNumberRegex.test(raw)) {
+    const m = raw.match(lineNumberRegex);
+    if (m) startLine = parseInt(m[1], 10);
+    code = raw.split('\n').map(l => l.replace(lineNumberRegex, '')).join('\n');
+  }
+
+  if (!langMatch) {
+    return (
+      <code style={{
+        background: 'rgba(0,0,0,.35)',
+        padding: '2px 6px',
+        borderRadius: 4,
+        fontSize: 12,
+        color: 'var(--cyan)',
+        fontFamily: 'var(--font-mono)',
+      }}>
+        {children}
+      </code>
+    );
+  }
+
+  return (
+    <SyntaxHighlighter
+      language={langMatch[1]}
+      style={oneDark}
+      showLineNumbers
+      startingLineNumber={startLine}
+      wrapLines
+      customStyle={{ margin: 0, borderRadius: 6, fontSize: '12.5px', lineHeight: '1.55' }}
+    >
+      {code}
+    </SyntaxHighlighter>
+  );
+};
+
+const MessageBubble = ({ role, content }) => (
+  <div className={`message ${role}`}>
+    <div className="msg-label">
+      <span className="msg-label-dot" />
+      {role === 'user' ? 'You' : 'ChatGIT'}
+    </div>
+    <div className="msg-bubble">
+      <ReactMarkdown
+        components={{
+          code({ node, inline, className, children, ...props }) {
+            return inline
+              ? <code style={{ background:'rgba(0,0,0,.35)', padding:'2px 5px', borderRadius:4, fontSize:12, color:'var(--cyan)', fontFamily:'var(--font-mono)' }}>{children}</code>
+              : <CodeBlock className={className}>{children}</CodeBlock>;
+          },
+          strong({ children }) {
+            return <strong style={{ color:'var(--accent-light)', fontWeight:600 }}>{children}</strong>;
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  </div>
+);
 
 const Chat = ({ chatLog, codeEnhancement }) => {
-    const [conversation, setConversation] = useState([]);
-    const [typedMessage, setTypedMessage] = useState('');
-    const [isWaitingResponse, setIsWaitingResponse] = useState(false);
-    const scrollAnchor = useRef(null);
+  const [conversation, setConversation] = useState([]);
+  const [message, setMessage] = useState('');
+  const [waiting, setWaiting] = useState(false);
+  const bottomRef = useRef(null);
 
-    useEffect(() => {
-        if (chatLog) {
-            setConversation(chatLog);
-        }
-    }, [chatLog]);
+  useEffect(() => { if (chatLog) setConversation(chatLog); }, [chatLog]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [conversation, waiting]);
 
-    useEffect(() => {
-        scrollAnchor.current?.scrollIntoView({ behavior: "smooth" });
-    }, [conversation]);
+  const send = async () => {
+    if (!message.trim() || waiting) return;
+    const userMsg = { role: 'user', content: message };
+    setConversation(prev => [...prev, userMsg]);
+    setMessage('');
+    setWaiting(true);
+    try {
+      const r = await axios.post(`${API_BASE_URL}/api/chat`, {
+        message: userMsg.content,
+        enhance_code: codeEnhancement,
+      });
+      setConversation(r.data.history);
+    } catch {
+      setConversation(prev => [...prev, {
+        role: 'assistant',
+        content: '**Error:** Could not reach the AI service. Please check the server.',
+      }]);
+    } finally {
+      setWaiting(false);
+    }
+  };
 
-    const sendMessage = async () => {
-        if (!typedMessage.trim() || isWaitingResponse) return;
+  const onKey = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  };
 
-        const newTask = { role: 'user', content: typedMessage };
-        setConversation(prev => [...prev, newTask]);
-        setTypedMessage('');
-        setIsWaitingResponse(true);
+  return (
+    <div>
+      <div className="chat-section-header">
+        <h2>💬 Chat</h2>
+        <span className="section-badge">Multi-turn · Session memory · Intent routing</span>
+      </div>
 
-        try {
-            const apiResponse = await axios.post(`${API_BASE_URL}/api/chat`, { message: newTask.content, enhance_code: codeEnhancement });
-            setConversation(apiResponse.data.history);
-        } catch (err) {
-            console.error("Communication failure", err);
-            setConversation(prev => [...prev, { role: 'assistant', content: "Error: Unable to reach AI service." }]);
-        } finally {
-            setIsWaitingResponse(false);
-        }
-    };
-
-    const checkKey = (e) => {
-        if (e.key === 'Enter') sendMessage();
-    };
-
-    return (
-        <div className="chat-container">
-            <div className="chat-messages">
-                {conversation.map((entry, index) => (
-                    <div key={index} className={`message ${entry.role}`}>
-                        <ReactMarkdown
-                            children={entry.content}
-                            components={{
-                                code({ node, inline, className, children, ...props }) {
-                                    const langMatch = /language-(\w+)/.exec(className || '')
-                                    let codeString = String(children).replace(/\n$/, '');
-
-                                    // Check if code already has line numbers (format: "  123 | code")
-                                    const lineNumberRegex = /^\s*(\d+)\s*\|\s*/;
-                                    const hasLineNumbers = lineNumberRegex.test(codeString);
-
-                                    let startingLine = 1;
-                                    let cleanedCode = codeString;
-
-                                    if (hasLineNumbers) {
-                                        // Extract the starting line number
-                                        const firstLineMatch = codeString.match(lineNumberRegex);
-                                        if (firstLineMatch) {
-                                            startingLine = parseInt(firstLineMatch[1], 10);
-                                        }
-
-                                        // Remove line numbers from each line
-                                        cleanedCode = codeString
-                                            .split('\n')
-                                            .map(line => line.replace(lineNumberRegex, ''))
-                                            .join('\n');
-                                    }
-
-                                    return !inline && langMatch ? (
-                                        <SyntaxHighlighter
-                                            {...props}
-                                            children={cleanedCode}
-                                            style={vscDarkPlus}
-                                            language={langMatch[1]}
-                                            PreTag="div"
-                                            showLineNumbers={true}
-                                            startingLineNumber={startingLine}
-                                            wrapLines={true}
-                                            customStyle={{
-                                                margin: 0,
-                                                borderRadius: 0,
-                                                fontSize: '13px',
-                                                lineHeight: '1.5'
-                                            }}
-                                        />
-                                    ) : (
-                                        <code {...props} className={className}>
-                                            {children}
-                                        </code>
-                                    )
-                                }
-                            }}
-                        />
-                    </div>
-                ))}
-                {isWaitingResponse && <div className="message assistant">Typing...</div>}
-                <div ref={scrollAnchor} />
+      <div className="chat-container">
+        <div className="chat-messages">
+          {conversation.length === 0 && !waiting && (
+            <div className="chat-empty">
+              <div className="chat-empty-icon">💬</div>
+              <div>Ask anything about the repository</div>
+              <div style={{ fontSize: 12, opacity: .6 }}>
+                Try: "Explain the main entry point" · "Where is auth handled?" · "Debug the error handler"
+              </div>
             </div>
-            <div className="chat-input">
-                <input
-                    type="text"
-                    value={typedMessage}
-                    onChange={(e) => setTypedMessage(e.target.value)}
-                    onKeyDown={checkKey}
-                    placeholder="Ask about the code..."
-                />
-                <button onClick={sendMessage} disabled={isWaitingResponse}>SEND</button>
-            </div>
+          )}
+          {conversation.map((m, i) => (
+            <MessageBubble key={i} role={m.role} content={m.content} />
+          ))}
+          {waiting && <TypingIndicator />}
+          <div ref={bottomRef} />
         </div>
-    );
+
+        <div className="chat-input-area">
+          <div className="chat-input-wrap">
+            <textarea
+              className="chat-input"
+              rows={1}
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              onKeyDown={onKey}
+              placeholder="Ask about the code… (Enter to send, Shift+Enter for newline)"
+            />
+          </div>
+          <button className="chat-send-btn" onClick={send} disabled={waiting || !message.trim()}>
+            ➤
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default Chat;

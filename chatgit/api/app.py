@@ -471,15 +471,20 @@ async def get_top_files():
 
 @app.get("/api/pagerank/hubs_authorities")
 async def get_network_metrics():
+    """Hub/authority via HITS on file graph (falls back to degree count)."""
     if not session.graph_analyzer:
         return {"hubs": [], "authorities": []}
     try:
-        hubs  = session.graph_analyzer.get_hub_files(10)
-        auths = session.graph_analyzer.get_authority_files(10)
-        return {
-            "hubs":        [{"name": f, "count": c} for f, c in hubs  if c > 0],
-            "authorities": [{"name": f, "count": c} for f, c in auths if c > 0],
-        }
+        hits = session.graph_analyzer.get_file_hits_scores(top_n=10)
+        hubs  = [{"name": n, "score": s} for n, s in hits["hubs"]        if s > 0]
+        auths = [{"name": n, "score": s} for n, s in hits["authorities"] if s > 0]
+        # Fallback to degree-count if HITS returned nothing
+        if not hubs:
+            raw_hubs  = session.graph_analyzer.get_hub_files(10)
+            raw_auths = session.graph_analyzer.get_authority_files(10)
+            hubs  = [{"name": f, "score": c} for f, c in raw_hubs  if c > 0]
+            auths = [{"name": f, "score": c} for f, c in raw_auths if c > 0]
+        return {"hubs": hubs, "authorities": auths}
     except Exception as e:
         print(f"[API] Error in get_network_metrics: {e}")
         return {"hubs": [], "authorities": []}
@@ -504,6 +509,36 @@ async def get_module_importance():
         return []
     items = session.graph_analyzer.get_import_pagerank()[:10]
     return [{"name": m, "score": s, "is_local": m.endswith(".py")} for m, s in items]
+
+@app.get("/api/hits")
+async def get_hits_analysis():
+    """
+    Return HITS hub and authority scores for both files and functions.
+    Hubs   = orchestrators / entry points (high out-degree importance)
+    Authorities = core utilities / shared logic (high in-degree importance)
+    """
+    if not session.graph_analyzer:
+        return {"files": {"hubs": [], "authorities": []},
+                "functions": {"hubs": [], "authorities": []}}
+    try:
+        file_hits = session.graph_analyzer.get_file_hits_scores(top_n=10)
+        func_hits = session.graph_analyzer.get_hits_scores(top_n=10)
+        # Serialize tuples to dicts for JSON
+        def _fmt(pairs):
+            return [{"name": n, "score": round(s, 6)} for n, s in pairs]
+        return {
+            "files": {
+                "hubs":        _fmt(file_hits["hubs"]),
+                "authorities": _fmt(file_hits["authorities"]),
+            },
+            "functions": {
+                "hubs":        _fmt(func_hits["hubs"]),
+                "authorities": _fmt(func_hits["authorities"]),
+            },
+        }
+    except Exception as exc:
+        import traceback; traceback.print_exc()
+        return {"error": str(exc)}
 
 @app.get("/api/call_graph")
 async def retrieve_call_graph(target_function: Optional[str] = None):
