@@ -105,12 +105,17 @@ class GitVolatilityAnalyzer:
         if not self._analyzed:
             return 1.0
 
+        if not self.file_change_count:
+            # No history data — return neutral weight
+            return 1.0
+
         if recency_focused:
             return 1.0 + self._recency(file_path)
         else:
-            # Slight penalty for very volatile code; stable code gets a small boost
+            # Volatile files (many authors, recent changes) may contain active bugs/features
+            # Stable files get a small boost for reliability on fact/locate queries
             v = self.get_volatility_score(file_path)
-            return 1.0 + 0.5 * (1.0 - v)
+            return 1.0 + 0.4 * (1.0 - v)
 
     def get_co_changed_files(self, file_path: str, top_n: int = 5) -> List[Tuple[str, int]]:
         """Files that most frequently co-change with *file_path* (logical coupling)."""

@@ -290,14 +290,16 @@ def run_chatgit(retrievers, queries, embed_model, k=10):
     return preds
 
 
-def run_chatgit_full(retrievers, queries, embed_model, k=10):
+def run_chatgit_config(retrievers, queries, embed_model, k=10,
+                       use_n1=True, use_n2=True, use_n5=True):
     """
-    ChatGIT with all 5 novelties:
-      N1 – git volatility weight applied to each retrieved chunk
-      N2 – hybrid PageRank + query-conditioned graph attention rescoring
-      N3 – session memory: redundancy penalty + session zone bonus
-      N4 – intent-driven granularity boost + dynamic top_k
-      N5 – call-graph neighbourhood: neighbour chunks boosted in score
+    Parametric ChatGIT runner — N3 and N4 always active; toggle N1/N2/N5.
+
+    N1 – git volatility weight (file-level retrieval weight from commit history)
+    N2 – hybrid PageRank + query-conditioned graph attention rescoring
+    N3 – session memory: redundancy penalty + session zone bonus  [always on]
+    N4 – intent-driven granularity boost + dynamic top_k          [always on]
+    N5 – call-graph bidirectional neighbourhood boost
     """
     by_conv = defaultdict(list)
     for row in queries:
@@ -308,25 +310,27 @@ def run_chatgit_full(retrievers, queries, embed_model, k=10):
         repo_id = conv_rows[0][4]
         if repo_id not in retrievers:
             continue
-        rv     = retrievers[repo_id]
-        chunks = rv["chunks"]
-        embs   = rv["embs"]
-        git_az = rv["git_analyzer"]       # N1
-        hyb_sc = rv["hybrid_scorer"]      # N2
-        pagerank = rv["pagerank"]         # N5
+        rv       = retrievers[repo_id]
+        chunks   = rv["chunks"]
+        embs     = rv["embs"]
+        git_az   = rv["git_analyzer"]   # N1
+        hyb_sc   = rv["hybrid_scorer"]  # N2
+        pagerank = rv["pagerank"]       # N5
         session_mem = SessionRetrievalMemory()
 
         for qid, query, gt, intent, _, _ in conv_rows:
             if not gt:
                 continue
-            # N4: intent classification
+
+            # N4: intent classification → dynamic retrieval config
             cfg = classify_intent(query)
             # N3: coreference resolution
             resolved = session_mem.resolve_coreferences(query)
-            q_emb = embed_model.encode([resolved], normalize_embeddings=True)[0].astype(np.float32)
-            sims  = embs @ q_emb
 
-            # N4: granularity boost
+            q_emb = embed_model.encode([resolved], normalize_embeddings=True)[0].astype(np.float32)
+            sims  = (embs @ q_emb).copy()   # copy so we can mutate
+
+            # N4: granularity boost on similarity scores
             for i, c in enumerate(chunks):
                 nt = c["node_type"]
                 if nt == "module_summary" and cfg.granularity == "module":
@@ -336,42 +340,50 @@ def run_chatgit_full(retrievers, queries, embed_model, k=10):
                 elif nt == "class" and intent == "explain":
                     sims[i] *= 1.10
 
-            # N2: hybrid importance rescoring
+            # N2: hybrid PageRank + query-conditioned graph attention
             hybrid_scores = {}
-            if hyb_sc._built and hyb_sc.graph is not None:
+            if use_n2 and hyb_sc._built and hyb_sc.graph is not None:
                 try:
                     hybrid_scores = hyb_sc.score_all(resolved, q_emb)
                 except Exception:
                     pass
 
-            # N1: build file-level volatility map
-            recency_focused = any(kw in resolved.lower() for kw in
-                                  ['recent', 'changed', 'latest', 'updated', 'new', 'modified'])
+            # N1: detect recency-focused queries
+            recency_focused = use_n1 and any(
+                kw in resolved.lower() for kw in
+                ['recent', 'changed', 'latest', 'updated', 'new', 'modified']
+            )
 
-            # N5: build neighbour set from call graph
-            neighbour_boost = {}   # chunk_id -> extra score
-            if pagerank is not None:
-                # Look at top-15 pre-N1N2 candidates to find neighbours
-                pre_top = np.argsort(-sims)[:15]
+            # N5: build call-graph neighbour boost map
+            # Only seed from top-5 highest-confidence chunks, and scale boost
+            # proportionally to parent similarity so low-confidence seeds don't
+            # propagate noise.
+            neighbour_boost = {}
+            if use_n5 and pagerank is not None:
+                pre_top = np.argsort(-sims)[:5]   # only high-confidence seeds
                 for i in pre_top:
-                    c = chunks[i]
-                    cname = c["node_name"]
-                    fname = c["file"]
-                    qname = f"{fname}::{cname}"
+                    parent_sim = float(sims[i])
+                    if parent_sim < 0.3:            # skip low-confidence seeds
+                        continue
+                    c     = chunks[i]
+                    qname = f"{c['file']}::{c['node_name']}"
                     if qname not in pagerank.function_graph:
                         continue
-                    succs = list(pagerank.function_graph.successors(qname))[:3]
-                    preds_graph = list(pagerank.function_graph.predecessors(qname))[:3]
-                    for neighbour_qname in succs + preds_graph:
-                        # Find chunk index for this neighbour
+                    succs      = list(pagerank.function_graph.successors(qname))[:2]
+                    preds_list = list(pagerank.function_graph.predecessors(qname))[:2]
+                    for nb_qname in succs + preds_list:
+                        nb_short = nb_qname.split("::")[-1]
                         for j, nc in enumerate(chunks):
                             nid = nc["id"]
-                            if nid == neighbour_qname or nid.endswith(f"::{neighbour_qname.split('::')[-1]}"):
-                                neighbour_boost[nid] = neighbour_boost.get(nid, 0) + 0.05
+                            if nid == nb_qname or nid.endswith(f"::{nb_short}"):
+                                # Boost proportional to parent confidence
+                                neighbour_boost[nid] = (
+                                    neighbour_boost.get(nid, 0) + 0.06 * parent_sim
+                                )
 
-            # Combine scores: sim * N1_weight * (1 + N2_boost) + N5_neighbour
+            # Combine all signals
             top_k_pool = min(cfg.top_k * 2, len(chunks))
-            top_idx = np.argsort(-sims)[:top_k_pool]
+            top_idx    = np.argsort(-sims)[:top_k_pool]
 
             scored = []
             for i in top_idx:
@@ -380,19 +392,23 @@ def run_chatgit_full(retrievers, queries, embed_model, k=10):
                 score = float(sims[i])
 
                 # N1: git volatility weight
-                n1_weight = git_az.get_retrieval_weight(fname, recency_focused)
-                score *= n1_weight
+                if use_n1:
+                    score *= git_az.get_retrieval_weight(fname, recency_focused)
 
-                # N2: hybrid importance boost (add as additive factor)
-                cname_key = f"{fname}::{chunks[i]['node_name']}"
-                h = hybrid_scores.get(cname_key, 0.0)
-                if h > 0:
-                    score *= (1.0 + 0.3 * h)
+                # N2: hybrid importance multiplicative boost
+                # Only apply when the node has a meaningful hybrid score (> 0.3),
+                # and use a small factor (0.05) to act as a gentle reranking nudge
+                # rather than a dominant signal.
+                if use_n2:
+                    h = hybrid_scores.get(f"{fname}::{chunks[i]['node_name']}", 0.0)
+                    if h > 0.3:
+                        score *= (1.0 + 0.05 * h)
 
-                # N5: call-neighbourhood boost
-                score += neighbour_boost.get(rid, 0.0)
+                # N5: call-neighbourhood additive boost
+                if use_n5:
+                    score += neighbour_boost.get(rid, 0.0)
 
-                # N3: session memory
+                # N3: session memory scoring
                 if rid in session_mem._retrieved:
                     score *= session_mem.REDUNDANCY_PENALTY_LAST_TURN
                 if fname in session_mem._active_files:
@@ -407,11 +423,13 @@ def run_chatgit_full(retrievers, queries, embed_model, k=10):
             preds.append({"query_id": qid, "retrieved": retrieved_ids,
                           "ground_truth": gt, "intent": intent})
 
-            session_mem.record_turn(query,
+            session_mem.record_turn(
+                query,
                 [{"file": r.split("::")[0] if "::" in r else r,
                   "node_name": r.split("::")[-1] if "::" in r else r,
                   "matched_funcs": []} for r in retrieved_ids],
-                f"[{intent}] {query[:40]}")
+                f"[{intent}] {query[:40]}"
+            )
     return preds
 
 
@@ -458,16 +476,38 @@ def main():
     print("\n[4/4] Running retrieval systems...")
     k = 10
     t0 = time.time()
-    bm25_preds      = run_lexical("bm25",      retrievers, queries_gt, k)
-    bm25t_preds     = run_lexical("bm25_tuned",retrievers, queries_gt, k)
-    vanilla_preds   = run_dense(retrievers, queries_gt, embed_model, k)
-    chatgit_preds   = run_chatgit(retrievers, queries_gt, embed_model, k)
+
+    # Baselines
+    bm25_preds    = run_lexical("bm25",       retrievers, queries_gt, k)
+    bm25t_preds   = run_lexical("bm25_tuned", retrievers, queries_gt, k)
+    vanilla_preds = run_dense(retrievers, queries_gt, embed_model, k)
+
+    # N3+N4 only (already confirmed system)
+    chatgit_n3n4_preds = run_chatgit(retrievers, queries_gt, embed_model, k)
+
+    # Ablations: add each new novelty one at a time on top of N3+N4
+    chatgit_n1_preds   = run_chatgit_config(retrievers, queries_gt, embed_model, k,
+                                            use_n1=True,  use_n2=False, use_n5=False)
+    chatgit_n2_preds   = run_chatgit_config(retrievers, queries_gt, embed_model, k,
+                                            use_n1=False, use_n2=True,  use_n5=False)
+    chatgit_n5_preds   = run_chatgit_config(retrievers, queries_gt, embed_model, k,
+                                            use_n1=False, use_n2=False, use_n5=True)
+
+    # Full system: all 5 novelties
+    chatgit_full_preds = run_chatgit_config(retrievers, queries_gt, embed_model, k,
+                                            use_n1=True,  use_n2=True,  use_n5=True)
     print(f"  All systems done in {time.time()-t0:.1f}s")
 
-    systems = {"BM25":              bm25_preds,
-               "BM25-Tuned(RepoCoder proxy)": bm25t_preds,
-               "VanillaRAG(BGE)":  vanilla_preds,
-               "ChatGIT(N3+N4+BGE)": chatgit_preds}
+    systems = {
+        "BM25":                          bm25_preds,
+        "BM25-Tuned(RepoCoder proxy)":   bm25t_preds,
+        "VanillaRAG(BGE)":               vanilla_preds,
+        "ChatGIT(N3+N4)":                chatgit_n3n4_preds,
+        "ChatGIT(N3+N4+N1)":             chatgit_n1_preds,
+        "ChatGIT(N3+N4+N2)":             chatgit_n2_preds,
+        "ChatGIT(N3+N4+N5)":             chatgit_n5_preds,
+        "ChatGIT(All5-N1+N2+N3+N4+N5)": chatgit_full_preds,
+    }
 
     # ── Evaluate ──────────────────────────────────────────────────────────────
     print("\n" + "=" * 70)
@@ -522,9 +562,9 @@ def main():
                          if c in p["ground_truth"]), 0.0)
             per_repo[repo][name].append(mrr)
     for repo in sorted(per_repo):
-        cg = np.mean(per_repo[repo].get("ChatGIT(N3+N4+BGE)",[0]))
-        bm = np.mean(per_repo[repo].get("BM25",[0]))
-        vr = np.mean(per_repo[repo].get("VanillaRAG(BGE)",[0]))
+        cg = np.mean(per_repo[repo].get("ChatGIT(All5-N1+N2+N3+N4+N5)", [0]))
+        bm = np.mean(per_repo[repo].get("BM25", [0]))
+        vr = np.mean(per_repo[repo].get("VanillaRAG(BGE)", [0]))
         print(f"  {repo:<14}  {cg:>10.4f}  {bm:>8.4f}  {vr:>12.4f}  {cg-bm:>+12.4f}")
 
     # ── Redundancy rate (N3) ──────────────────────────────────────────────────
@@ -535,9 +575,9 @@ def main():
 
     # ── Statistical significance ───────────────────────────────────────────────
     print(f"\n  STATISTICAL SIGNIFICANCE (ChatGIT vs baselines, n={len(queries_gt)})")
-    cg_q   = {p["query_id"]: p for p in results["ChatGIT(N3+N4+BGE)"]["per_query"]}
+    cg_q   = {p["query_id"]: p for p in results["ChatGIT(All5-N1+N2+N3+N4+N5)"]["per_query"]}
     reports = []
-    for name in ["BM25","BM25-Tuned(RepoCoder proxy)","VanillaRAG(BGE)"]:
+    for name in ["BM25", "BM25-Tuned(RepoCoder proxy)", "VanillaRAG(BGE)", "ChatGIT(N3+N4)"]:
         oth_q = {p["query_id"]: p for p in results[name]["per_query"]}
         common = sorted(set(cg_q) & set(oth_q))
         if len(common) < 2:
