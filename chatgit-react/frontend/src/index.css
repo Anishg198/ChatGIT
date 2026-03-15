@@ -1,16 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
+  /* Dark mode (default) */
   --bg-base:        #06060f;
   --bg-surface:     #0d0d1a;
   --bg-elevated:    #12121f;
-  --bg-card:        rgba(255,255,255,0.035);
-  --bg-card-hover:  rgba(255,255,255,0.06);
+  --bg-card:        rgba(255,255,255,0.04);
+  --bg-card-hover:  rgba(255,255,255,0.07);
 
   --accent:         #6366f1;
   --accent-light:   #818cf8;
   --accent-muted:   rgba(99,102,241,0.15);
-  --accent-border:  rgba(99,102,241,0.3);
+  --accent-border:  rgba(99,102,241,0.35);
   --purple:         #a855f7;
   --cyan:           #22d3ee;
   --green:          #4ade80;
@@ -19,16 +20,22 @@
 
   --text-primary:   #f1f5f9;
   --text-secondary: #94a3b8;
-  --text-muted:     #475569;
-  --border:         rgba(255,255,255,0.06);
-  --border-bright:  rgba(255,255,255,0.12);
+  --text-muted:     #64748b;
+  --border:         rgba(255,255,255,0.07);
+  --border-bright:  rgba(255,255,255,0.14);
 
-  --sidebar-w:      280px;
-  --radius-sm:      6px;
-  --radius-md:      10px;
+  --tree-bg:        #0d0d1a;
+  --tree-item-hover: rgba(99,102,241,0.12);
+  --tree-fn-color:  #4ade80;
+  --tree-class-color: #a855f7;
+  --tree-border:    rgba(255,255,255,0.08);
+
+  --sidebar-w:      290px;
+  --radius-sm:      7px;
+  --radius-md:      11px;
   --radius-lg:      16px;
 
-  --shadow-glow:    0 0 30px rgba(99,102,241,0.18);
+  --shadow-glow:    0 0 30px rgba(99,102,241,0.2);
   --shadow-card:    0 4px 24px rgba(0,0,0,0.4);
   --shadow-sm:      0 2px 8px rgba(0,0,0,0.3);
 
@@ -38,9 +45,52 @@
   --transition: 0.18s cubic-bezier(.4,0,.2,1);
 }
 
+/* ── Light mode overrides ── */
+body.light {
+  --bg-base:        #f0f2f8;
+  --bg-surface:     #e8eaf4;
+  --bg-elevated:    #ffffff;
+  --bg-card:        rgba(255,255,255,0.75);
+  --bg-card-hover:  rgba(255,255,255,0.95);
+
+  --text-primary:   #1e1e3a;
+  --text-secondary: #4a5568;
+  --text-muted:     #8896ad;
+  --border:         rgba(0,0,0,0.08);
+  --border-bright:  rgba(0,0,0,0.14);
+
+  --tree-bg:        #f8f9ff;
+  --tree-item-hover: rgba(99,102,241,0.08);
+  --tree-fn-color:  #16803c;
+  --tree-class-color: #7c3aed;
+  --tree-border:    rgba(0,0,0,0.1);
+
+  --shadow-glow:    0 0 30px rgba(99,102,241,0.12);
+  --shadow-card:    0 4px 20px rgba(0,0,0,0.08);
+  --shadow-sm:      0 2px 6px rgba(0,0,0,0.07);
+}
+
+body.light .sidebar {
+  background: linear-gradient(180deg, #1a1a3e 0%, #141430 100%) !important;
+}
+
+/* Keep sidebar text readable in light mode */
+body.light .sidebar,
+body.light .sidebar * {
+  color: inherit;
+}
+body.light .sidebar { color: #e2e8f0; }
+
+/* Light mode: body grid should still be subtle */
+body.light::before {
+  background-image:
+    linear-gradient(rgba(99,102,241,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99,102,241,0.05) 1px, transparent 1px);
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 
-html { font-size: 15px; }
+html { font-size: 16px; }
 
 body {
   margin: 0;

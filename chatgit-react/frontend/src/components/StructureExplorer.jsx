@@ -3,181 +3,152 @@ import axios from 'axios';
 import { API_BASE_URL } from '../config';
 
 const TreeNode = ({ name, data, isFile, depth }) => {
-    const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const indent = depth * 18;
 
-    const toggle = () => setExpanded(!expanded);
+  let icon = expanded ? '📂' : '📁';
+  if (isFile) {
+    if (name.endsWith('.py'))  icon = '🐍';
+    else if (name.endsWith('.js') || name.endsWith('.jsx')) icon = '📜';
+    else if (name.endsWith('.ts') || name.endsWith('.tsx')) icon = '📘';
+    else icon = '📄';
+  }
 
-    const paddingLeft = `${depth * 20}px`;
-
-    // Icon logic
-    let icon = "📁";
-    if (isFile) {
-        if (name.endsWith('.py')) icon = "🐍";
-        else if (name.endsWith('.js')) icon = "📜";
-        else if (name.endsWith('.ts')) icon = "📘";
-        else icon = "📄";
-    }
-
-    // Render File Details (Functions/Classes)
-    if (isFile && expanded) {
-        const functions = data.functions || [];
-        const classes = data.classes || [];
-
-        return (
-            <div>
-                <div
-                    onClick={toggle}
-                    style={{
-                        paddingLeft,
-                        cursor: 'pointer',
-                        userSelect: 'none',
-                        paddingTop: '4px',
-                        paddingBottom: '4px',
-                        backgroundColor: expanded ? '#E6E6FF' : 'transparent',
-                        color: expanded ? '#0000FF' : 'inherit'
-                    }}
-                >
-                    {icon} {name}
-                </div>
-                <div style={{ marginLeft: `${depth * 20 + 20}px`, borderLeft: '1px solid #CCC', paddingLeft: '10px' }}>
-                    {classes.map((c, i) => (
-                        <div key={`c-${i}`} style={{ fontSize: '0.85em', color: '#6A00FF' }}>
-                            Box: {c.name}
-                        </div>
-                    ))}
-                    {functions.map((f, i) => (
-                        <div key={`f-${i}`} style={{ fontSize: '0.85em', color: '#008000' }}>
-                            ƒ: {f.name}
-                        </div>
-                    ))}
-                    {classes.length === 0 && functions.length === 0 && (
-                        <div style={{ fontSize: '0.8em', color: '#888', fontStyle: 'italic' }}>
-                            (No parsed symbols)
-                        </div>
-                    )}
-                </div>
-            </div>
-        );
-    }
-
-    if (!isFile && expanded) {
-        return (
-            <div>
-                <div
-                    onClick={toggle}
-                    style={{
-                        paddingLeft,
-                        cursor: 'pointer',
-                        userSelect: 'none',
-                        fontWeight: 'bold',
-                        paddingTop: '4px',
-                        paddingBottom: '4px'
-                    }}
-                >
-                    {expanded ? '📂' : '📁'} {name}
-                </div>
-                {Object.keys(data).sort().map((childName) => {
-                    const isChildFile = data[childName].__isFile;
-                    return (
-                        <TreeNode
-                            key={childName}
-                            name={childName}
-                            data={data[childName]}
-                            isFile={isChildFile}
-                            depth={depth + 1}
-                        />
-                    );
-                })}
-            </div>
-        );
-    }
-
-    // Collapsed state
+  if (isFile) {
+    const functions = data.functions || [];
+    const classes   = data.classes   || [];
     return (
+      <div>
         <div
-            onClick={toggle}
-            style={{
-                paddingLeft,
-                cursor: 'pointer',
-                userSelect: 'none',
-                paddingTop: '4px',
-                paddingBottom: '4px',
-                fontWeight: isFile ? 'normal' : 'bold'
-            }}
+          className={`tree-node-row ${expanded ? 'active' : ''}`}
+          style={{ paddingLeft: indent + 10 }}
+          onClick={() => setExpanded(e => !e)}
         >
-            {isFile ? icon : '📁'} {name}
+          <span>{icon}</span>
+          <span>{name}</span>
+          {(functions.length > 0 || classes.length > 0) && (
+            <span style={{ marginLeft: 'auto', fontSize: 11, opacity: .5 }}>
+              {classes.length > 0 && `${classes.length} cls`}
+              {classes.length > 0 && functions.length > 0 && ' · '}
+              {functions.length > 0 && `${functions.length} fn`}
+            </span>
+          )}
         </div>
+
+        {expanded && (
+          <div className="tree-children" style={{ marginLeft: indent + 18 }}>
+            {classes.map((c, i) => (
+              <div key={`c-${i}`} className="tree-symbol-class">
+                ◆ {c.name}
+              </div>
+            ))}
+            {functions.map((f, i) => (
+              <div key={`f-${i}`} className="tree-symbol-fn">
+                ƒ {f.name}
+              </div>
+            ))}
+            {classes.length === 0 && functions.length === 0 && (
+              <div className="tree-symbol-empty">(no parsed symbols)</div>
+            )}
+          </div>
+        )}
+      </div>
     );
+  }
+
+  // Directory node
+  return (
+    <div>
+      <div
+        className="tree-node-row"
+        style={{ paddingLeft: indent + 10, fontWeight: 600 }}
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span>{expanded ? '📂' : '📁'}</span>
+        <span>{name}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 11, opacity: .4 }}>
+          {expanded ? '▾' : '▸'}
+        </span>
+      </div>
+      {expanded && (
+        <div className="tree-children" style={{ marginLeft: indent + 18 }}>
+          {Object.keys(data).sort().map(childName => (
+            <TreeNode
+              key={childName}
+              name={childName}
+              data={data[childName]}
+              isFile={!!data[childName].__isFile}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const StructureExplorer = () => {
-    const [fileTree, setFileTree] = useState(null);
-    const [loading, setLoading] = useState(true);
+  const [fileTree, setFileTree] = useState(null);
+  const [loading, setLoading]   = useState(true);
 
-    useEffect(() => {
-        const fetchStructure = async () => {
-            try {
-                const res = await axios.get(`${API_BASE_URL}/api/structure`);
-                const rawFiles = res.data; // Dict of "path/to/file": { metadata }
-
-                // Build Tree
-                const treeRoot = {};
-
-                Object.keys(rawFiles).forEach(path => {
-                    const parts = path.split('/');
-                    let currentLevel = treeRoot;
-
-                    parts.forEach((part, index) => {
-                        if (index === parts.length - 1) {
-                            // File Node
-                            currentLevel[part] = { ...rawFiles[path], __isFile: true };
-                        } else {
-                            // Directory Node
-                            if (!currentLevel[part]) {
-                                currentLevel[part] = {};
-                            }
-                            currentLevel = currentLevel[part];
-                        }
-                    });
-                });
-
-                setFileTree(treeRoot);
-            } catch (err) {
-                console.error("Failed to fetch structure", err);
-            } finally {
-                setLoading(false);
+  useEffect(() => {
+    const fetch_ = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/api/structure`);
+        const rawFiles = res.data;
+        const root = {};
+        Object.keys(rawFiles).forEach(path => {
+          const parts = path.split('/');
+          let cur = root;
+          parts.forEach((part, idx) => {
+            if (idx === parts.length - 1) {
+              cur[part] = { ...rawFiles[path], __isFile: true };
+            } else {
+              if (!cur[part]) cur[part] = {};
+              cur = cur[part];
             }
-        };
+          });
+        });
+        setFileTree(root);
+      } catch (err) {
+        console.error('Failed to fetch structure', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetch_();
+  }, []);
 
-        fetchStructure();
-    }, []);
+  return (
+    <div className="structure-container">
+      <div className="section-header" style={{ marginBottom: 16 }}>
+        <h2>🗂 Repository Explorer</h2>
+        <span className="section-badge">AST View</span>
+      </div>
 
-    if (loading) return <div>Loading file system...</div>;
-    if (!fileTree) return <div>No structure available.</div>;
-
-    return (
-        <div className="structure-explorer-container" style={{
-            border: '2px solid #0000FF',
-            padding: '20px',
-            margin: '20px 0',
-            backgroundColor: '#FFFFFF',
-            maxHeight: '600px',
-            overflowY: 'auto'
-        }}>
-            <h2 style={{ marginBottom: '15px' }}>REPOSITORY EXPLORER (AST View)</h2>
-            <div className="tree-root">
-                {Object.keys(fileTree).sort().map(name => (
-                    <TreeNode
-                        key={name}
-                        name={name}
-                        data={fileTree[name]}
-                        isFile={fileTree[name].__isFile}
-                        depth={0}
-                    />
-                ))}
-            </div>
+      {loading && (
+        <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '12px 0' }}>
+          Loading file tree…
         </div>
-    );
+      )}
+      {!loading && !fileTree && (
+        <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>No structure available.</div>
+      )}
+      {!loading && fileTree && (
+        <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+          {Object.keys(fileTree).sort().map(name => (
+            <TreeNode
+              key={name}
+              name={name}
+              data={fileTree[name]}
+              isFile={!!fileTree[name].__isFile}
+              depth={0}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default StructureExplorer;

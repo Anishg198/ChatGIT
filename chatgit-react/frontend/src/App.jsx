@@ -27,6 +27,12 @@ function App() {
   const [graphEnabled,   setGraph]          = useState(false);
   const [treeEnabled,    setTree]           = useState(false);
   const [hitsEnabled,    setHits]           = useState(false);
+  const [lightMode,      setLightMode]      = useState(false);
+
+  // Apply theme class to body
+  useEffect(() => {
+    document.body.classList.toggle('light', lightMode);
+  }, [lightMode]);
 
   // Cycle through loading steps for visual feedback
   useEffect(() => {
@@ -115,6 +121,8 @@ function App() {
         toggleTree={setTree}
         hitsEnabled={hitsEnabled}
         toggleHits={setHits}
+        lightMode={lightMode}
+        toggleLightMode={() => setLightMode(m => !m)}
       />
 
       <div className="main-content">

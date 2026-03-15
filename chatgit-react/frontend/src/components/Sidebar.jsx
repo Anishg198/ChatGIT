@@ -20,6 +20,8 @@ const Sidebar = ({
   toggleTree,
   hitsEnabled,
   toggleHits,
+  lightMode,
+  toggleLightMode,
 }) => {
   const [repoInput, setRepoInput] = useState('');
 
@@ -103,7 +105,11 @@ const Sidebar = ({
 
       {/* Footer */}
       <div style={{ marginTop: 'auto', paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+        <button className="theme-btn" onClick={toggleLightMode}>
+          <span className="theme-btn-icon">{lightMode ? '🌙' : '☀️'}</span>
+          {lightMode ? 'Dark Mode' : 'Light Mode'}
+        </button>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
           <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>ChatGIT v2.0</div>
           Multi-turn conversational repo intelligence with session memory, intent routing &amp; call-graph augmentation.
         </div>

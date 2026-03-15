@@ -49,7 +49,7 @@
 }
 
 .sidebar-logo h1 {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   background: linear-gradient(135deg, var(--accent-light), var(--purple));
   -webkit-background-clip: text;
@@ -63,7 +63,7 @@
 }
 
 .sidebar-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -94,7 +94,7 @@
   border: 1px solid var(--border-bright);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 14px;
   font-family: var(--font-mono);
   transition: border-color var(--transition), box-shadow var(--transition);
   outline: none;
@@ -109,12 +109,12 @@
 
 .btn-primary {
   width: 100%;
-  padding: 11px 16px;
+  padding: 12px 16px;
   background: linear-gradient(135deg, var(--accent), var(--purple));
   border: none;
   border-radius: var(--radius-sm);
   color: #fff;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.02em;
   transition: opacity var(--transition), transform var(--transition), box-shadow var(--transition);
@@ -144,7 +144,7 @@
   border: 1px solid var(--border-bright);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   transition: all var(--transition);
   display: flex;
@@ -171,7 +171,7 @@
 .toggle-row:last-child { border-bottom: none; }
 
 .toggle-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
   display: flex;
@@ -179,7 +179,7 @@
   gap: 7px;
 }
 
-.toggle-label .icon { font-size: 13px; }
+.toggle-label .icon { font-size: 14px; }
 
 .toggle {
   position: relative;
@@ -230,7 +230,7 @@
 
 .repo-badge-name {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--accent-light);
   word-break: break-all;
   display: flex;
@@ -296,7 +296,7 @@
 
 .welcome-screen p {
   color: var(--text-secondary);
-  font-size: 15px;
+  font-size: 16px;
   max-width: 360px;
   line-height: 1.6;
 }
@@ -310,11 +310,11 @@
 }
 
 .feature-chip {
-  padding: 6px 14px;
+  padding: 7px 16px;
   background: var(--accent-muted);
   border: 1px solid var(--accent-border);
   border-radius: 99px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--accent-light);
   font-weight: 500;
 }
@@ -344,7 +344,7 @@
 }
 
 .dash-subtitle {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -428,7 +428,7 @@
 }
 
 .stat-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -447,17 +447,17 @@
 }
 
 .section-header h2 {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .section-badge {
-  padding: 2px 9px;
+  padding: 3px 10px;
   background: var(--accent-muted);
   border: 1px solid var(--accent-border);
   border-radius: 99px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent-light);
   font-weight: 600;
 }
@@ -476,11 +476,11 @@
 }
 
 .tab {
-  padding: 8px 16px;
+  padding: 9px 18px;
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -537,7 +537,7 @@
 .rank-name {
   flex: 1;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -571,7 +571,7 @@
 
 .rank-score {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   width: 52px;
   text-align: right;
@@ -585,7 +585,7 @@
 }
 
 .hits-section-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -629,7 +629,7 @@
 }
 
 .chat-section-header h2 {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
 }
 
@@ -687,7 +687,7 @@
 }
 
 .msg-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -709,9 +709,9 @@
 
 .msg-bubble {
   border-radius: var(--radius-md);
-  padding: 12px 16px;
-  font-size: 14px;
-  line-height: 1.65;
+  padding: 14px 18px;
+  font-size: 15px;
+  line-height: 1.7;
   word-break: break-word;
 }
 
@@ -805,12 +805,12 @@
 
 .chat-input {
   width: 100%;
-  padding: 11px 40px 11px 14px;
+  padding: 12px 42px 12px 16px;
   background: var(--bg-card);
   border: 1px solid var(--border-bright);
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 15px;
   font-family: var(--font-sans);
   resize: none;
   outline: none;
@@ -885,7 +885,7 @@
 }
 
 .loading-overlay p {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
   text-align: center;
   max-width: 300px;
@@ -903,7 +903,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
   padding: 8px 16px;
   background: var(--bg-card);
@@ -940,22 +940,113 @@
 .card + .card { margin-top: 16px; }
 
 /* ═══════════════════════════════════════
+   THEME TOGGLE BUTTON
+═══════════════════════════════════════ */
+.theme-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--transition);
+  cursor: pointer;
+  margin-bottom: 16px;
+}
+
+.theme-btn:hover {
+  border-color: var(--accent-border);
+  color: var(--text-primary);
+  background: var(--accent-muted);
+}
+
+.theme-btn-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* ═══════════════════════════════════════
    STRUCTURE EXPLORER
 ═══════════════════════════════════════ */
 .structure-container {
-  background: var(--bg-card);
+  background: var(--tree-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 20px;
   margin-bottom: 24px;
   animation: fadeSlideUp .4s ease;
+  box-shadow: var(--shadow-card);
+}
+
+.structure-container h2 {
+  font-size: 17px;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.tree-node-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+  user-select: none;
+}
+
+.tree-node-row:hover {
+  background: var(--tree-item-hover);
+  color: var(--text-primary);
+}
+
+.tree-node-row.active {
+  background: var(--accent-muted);
+  color: var(--accent-light);
+}
+
+.tree-symbol-fn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--tree-fn-color);
+  padding: 3px 8px 3px 4px;
+  border-radius: 4px;
+}
+
+.tree-symbol-class {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--tree-class-color);
+  padding: 3px 8px 3px 4px;
+  border-radius: 4px;
+}
+
+.tree-symbol-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 3px 8px;
+}
+
+.tree-children {
+  border-left: 1px solid var(--tree-border);
+  margin-left: 14px;
+  padding-left: 6px;
 }
 
 .file-tree-item {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
-  padding: 4px 8px;
+  padding: 5px 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background var(--transition), color var(--transition);

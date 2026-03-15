@@ -108,10 +108,11 @@ const Chat = ({ chatLog, codeEnhancement }) => {
         enhance_code: codeEnhancement,
       });
       setConversation(r.data.history);
-    } catch {
+    } catch (err) {
+      const detail = err.response?.data?.detail || err.message || 'Could not reach the AI service. Please check the server.';
       setConversation(prev => [...prev, {
         role: 'assistant',
-        content: '**Error:** Could not reach the AI service. Please check the server.',
+        content: `**Error:** ${detail}`,
       }]);
     } finally {
       setWaiting(false);

@@ -860,6 +860,15 @@ Answer:"""
             {"role": "user", "content": final_prompt},
         ]
 
+        if session.llm_client is None:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Groq LLM client is not initialized. "
+                    "Please set GROQ_API_KEY in your .env file and restart the server."
+                )
+            )
+
         temp = determine_temperature(query)
         completion = session.llm_client.chat.completions.create(
             model="llama-3.1-8b-instant",
