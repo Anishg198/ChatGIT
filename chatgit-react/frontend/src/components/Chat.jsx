@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import ReactMarkdown from 'react-markdown';
@@ -21,7 +21,7 @@ const TypingIndicator = () => (
 
 const lineNumberRegex = /^\s*(\d+)\s*\|\s*/;
 
-const CodeBlock = ({ className, children }) => {
+const CodeBlock = memo(({ className, children }) => {
   const langMatch = /language-(\w+)/.exec(className || '');
   const raw = String(children).replace(/\n$/, '');
 
@@ -60,9 +60,9 @@ const CodeBlock = ({ className, children }) => {
       {code}
     </SyntaxHighlighter>
   );
-};
+});
 
-const MessageBubble = ({ role, content }) => (
+const MessageBubble = memo(({ role, content }) => (
   <div className={`message ${role}`}>
     <div className="msg-label">
       <span className="msg-label-dot" />
@@ -85,7 +85,28 @@ const MessageBubble = ({ role, content }) => (
       </ReactMarkdown>
     </div>
   </div>
-);
+));
+
+// Isolated input component — never re-renders due to conversation changes
+const ChatInput = memo(({ onSend, waiting, message, setMessage, onKey }) => (
+  <div className="chat-input-area">
+    <div className="chat-input-wrap">
+      <textarea
+        className="chat-input"
+        rows={1}
+        value={message}
+        onChange={e => setMessage(e.target.value)}
+        onKeyDown={onKey}
+        placeholder="Ask about the code… (Enter to send, Shift+Enter for newline)"
+        autoComplete="off"
+        spellCheck={false}
+      />
+    </div>
+    <button className="chat-send-btn" onClick={onSend} disabled={waiting || !message.trim()}>
+      ➤
+    </button>
+  </div>
+));
 
 const Chat = ({ chatLog, codeEnhancement }) => {
   const [conversation, setConversation] = useState([]);
@@ -96,7 +117,7 @@ const Chat = ({ chatLog, codeEnhancement }) => {
   useEffect(() => { if (chatLog) setConversation(chatLog); }, [chatLog]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [conversation, waiting]);
 
-  const send = async () => {
+  const send = useCallback(async () => {
     if (!message.trim() || waiting) return;
     const userMsg = { role: 'user', content: message };
     setConversation(prev => [...prev, userMsg]);
@@ -117,11 +138,11 @@ const Chat = ({ chatLog, codeEnhancement }) => {
     } finally {
       setWaiting(false);
     }
-  };
+  }, [message, waiting, codeEnhancement]);
 
-  const onKey = (e) => {
+  const onKey = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-  };
+  }, [send]);
 
   return (
     <div>
@@ -148,21 +169,7 @@ const Chat = ({ chatLog, codeEnhancement }) => {
           <div ref={bottomRef} />
         </div>
 
-        <div className="chat-input-area">
-          <div className="chat-input-wrap">
-            <textarea
-              className="chat-input"
-              rows={1}
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              onKeyDown={onKey}
-              placeholder="Ask about the code… (Enter to send, Shift+Enter for newline)"
-            />
-          </div>
-          <button className="chat-send-btn" onClick={send} disabled={waiting || !message.trim()}>
-            ➤
-          </button>
-        </div>
+        <ChatInput onSend={send} waiting={waiting} message={message} setMessage={setMessage} onKey={onKey} />
       </div>
     </div>
   );

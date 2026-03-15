@@ -54,10 +54,19 @@ class SessionRetrievalMemory:
         self._active_files: Dict[str, float] = {}
         # functions discussed across the session (most recent last)
         self._discussed_fns: List[str] = []
+        # full query history: [(turn, query_text)] — used for temporal back-refs
+        self._query_history: List[tuple] = []
 
     # ------------------------------------------------------------------
     # Record a completed turn
     # ------------------------------------------------------------------
+
+    def record_query(self, query: str):
+        """Call at the START of a turn (before retrieval) to log the raw query."""
+        self._query_history.append((self.turn + 1, query.strip()))
+        # Keep bounded
+        if len(self._query_history) > 50:
+            self._query_history = self._query_history[-50:]
 
     def record_turn(self, query: str, retrieved_chunks: List[dict], response: str):
         """
@@ -136,6 +145,7 @@ class SessionRetrievalMemory:
     # Co-reference resolution
     # ------------------------------------------------------------------
 
+    # Simple pronoun patterns → expand with last discussed function
     _PRONOUN_PATTERNS = [
         r"\bit\b",
         r"\bthis function\b",
@@ -146,18 +156,68 @@ class SessionRetrievalMemory:
         r"\bthe above\b",
     ]
 
+    # Temporal back-reference patterns → expand with FIRST or EARLY query
+    _TEMPORAL_FIRST_PATTERNS = [
+        r"\bin the beginning\b",
+        r"\bat the (very )?start\b",
+        r"\bmy first question\b",
+        r"\bthe first (query|question|thing)\b",
+        r"\binitially\b",
+        r"\boriginally\b",
+        r"\bfirst asked\b",
+        r"\basked (at|in) the beginning\b",
+        r"\bthe function i asked\b",
+    ]
+
+    # Repeat / "again" patterns → expand with previous query
+    _REPEAT_PATTERNS = [
+        r"^again[?!.]?\s*$",
+        r"^repeat\s*$",
+        r"\bsame (question|query)\b",
+        r"\bask again\b",
+        r"\bone more time\b",
+        r"^more[?!.]?\s*$",
+    ]
+
     def resolve_coreferences(self, query: str) -> str:
         """
-        Expand short pronoun-heavy queries with session context.
-        E.g. "what does it return?" → "what does <last_func> return?"
+        Expand queries with session context based on three resolution strategies:
+
+        1. Temporal back-references ("the function I asked in the beginning")
+           → resolved to the FIRST query in the session history
+        2. Repeat queries ("again?", "more?")
+           → resolved to the PREVIOUS query
+        3. Pronoun references ("it", "this function")
+           → resolved to the last discussed function
         """
-        if not self._discussed_fns and not self._active_files:
+        if not self._discussed_fns and not self._active_files and not self._query_history:
             return query
 
         q = query.strip()
         q_lower = q.lower()
 
-        # Only attempt resolution for short queries that contain pronouns
+        # ── Strategy 1: Temporal back-references ──────────────────────────
+        for pattern in self._TEMPORAL_FIRST_PATTERNS:
+            if re.search(pattern, q_lower):
+                if self._query_history:
+                    first_query = self._query_history[0][1]
+                    q = f"{q} [referring to earlier question: \"{first_query}\"]"
+                    # Also pin the first discussed function if available
+                    if self._discussed_fns:
+                        q += f" [first function discussed: '{self._discussed_fns[0]}']"
+                return q
+
+        # ── Strategy 2: Repeat / "again" queries ──────────────────────────
+        for pattern in self._REPEAT_PATTERNS:
+            if re.search(pattern, q_lower):
+                if len(self._query_history) >= 2:
+                    prev_query = self._query_history[-2][1]  # the turn before this one
+                    q = f"{prev_query} [follow-up: {q}]"
+                elif self._query_history:
+                    q = self._query_history[-1][1]
+                return q
+
+        # ── Strategy 3: Pronoun resolution (short queries only) ───────────
         if len(q.split()) < 10:
             for pattern in self._PRONOUN_PATTERNS:
                 if re.search(pattern, q_lower):
@@ -166,7 +226,7 @@ class SessionRetrievalMemory:
                         q = f"{q} [context: function '{last_fn}']"
                     break
 
-        # If query has no clear subject at all, hint with the most active file
+        # ── Fallback: bare short query → hint with most active file ───────
         if len(q.split()) < 5 and self._active_files:
             top_file = max(self._active_files, key=self._active_files.get)
             q = f"{q} [file context: {top_file}]"
@@ -186,6 +246,10 @@ class SessionRetrievalMemory:
             return ""
 
         lines = ["\n## Session Context (Multi-Turn Memory)"]
+        if self._query_history:
+            lines.append(f"- First question asked: \"{self._query_history[0][1]}\"")
+            if len(self._query_history) > 1:
+                lines.append(f"- Previous question: \"{self._query_history[-2][1]}\"")
         if self._discussed_fns:
             fns = ", ".join(f"`{f}`" for f in self._discussed_fns[-5:])
             lines.append(f"- Recently discussed functions: {fns}")

@@ -603,6 +603,9 @@ async def process_chat(payload: MessagePayload):
         analyzer  = session.graph_analyzer
         ast_data  = session.code_ast
 
+        # ── Novelty 3: log query BEFORE resolution (enables temporal back-refs)
+        session.retrieval_memory.record_query(raw_query)
+
         # ── Novelty 3: co-reference resolution ──────────────────────────
         query = session.retrieval_memory.resolve_coreferences(raw_query)
         if query != raw_query:
