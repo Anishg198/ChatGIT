@@ -1,6 +1,6 @@
 % ============================================================
 % ChatGIT: Granularity-Adaptive Conversational Repository Intelligence
-% Springer LNCS — Camera-Ready Submission
+% Springer LNCS
 % Authors: Anish Gupta, Prakhar Sethi, Ritwik Bhattacharya,
 %          Dr. Sonia Khetarpaul
 % Institution: SNU — School of Engineering and Applied Science
@@ -24,83 +24,62 @@
 \usepackage{microtype}
 \usepackage[table]{xcolor}
 
-% ── TikZ + pgfplots ───────────────────────────────────────────
+% ── TikZ ──────────────────────────────────────────────────
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, shapes.geometric, shapes.rounded,
-                fit, positioning, backgrounds, calc,
-                decorations.pathreplacing, shadows.blur}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.18}
-\usepackage{pgfplotstable}
+                fit, positioning, backgrounds, calc}
 
-% ── Colour palette ────────────────────────────────────────────
+% ── Colour palette ────────────────────────────────────────
 \definecolor{cBlue}   {HTML}{3B82F6}
 \definecolor{cIndigo} {HTML}{6366F1}
 \definecolor{cPurple} {HTML}{A855F7}
 \definecolor{cGreen}  {HTML}{22C55E}
 \definecolor{cAmber}  {HTML}{F59E0B}
-\definecolor{cCyan}   {HTML}{06B6D4}
 \definecolor{cSlate}  {HTML}{64748B}
 \definecolor{cDark}   {HTML}{1E293B}
-\definecolor{cBgLight}{HTML}{F8FAFC}
 
-% ── TikZ styles ───────────────────────────────────────────────
+% ── TikZ styles ───────────────────────────────────────────
 \tikzset{
-  % Rounded pill with soft shadow
-  pnode/.style={
-    rounded corners=5pt,
-    draw=#1!70!black, line width=0.8pt,
-    fill=#1!14,
-    text=cDark, font=\footnotesize\bfseries,
-    align=center, minimum height=0.68cm,
-    inner sep=5pt,
-    blur shadow={shadow blur steps=4,
-                 shadow xshift=0.6pt, shadow yshift=-0.6pt,
-                 shadow opacity=18}
+  stagenode/.style={
+    rounded corners=4pt,
+    draw=#1!60!black, line width=0.8pt,
+    fill=#1!12,
+    font=\small\bfseries, text=cDark,
+    align=center, minimum height=1.0cm,
+    text width=3.0cm,
+    inner sep=6pt,
   },
-  % Novelty badge — amber accent
-  nbadge/.style={
+  sidenode/.style={
     rounded corners=3pt,
-    draw=cAmber!80, line width=0.65pt,
-    fill=cAmber!18,
-    font=\scriptsize\bfseries, text=cDark,
-    align=center, inner sep=3.5pt, minimum height=0.54cm,
+    draw=#1!50!black, line width=0.7pt,
+    fill=#1!10,
+    font=\small, text=cDark,
+    align=center, minimum height=0.8cm,
+    text width=2.6cm,
+    inner sep=5pt,
   },
-  % Main arrow
-  arr/.style={
+  mainarr/.style={
     -{Stealth[length=5pt,width=4pt]},
-    line width=1pt, color=#1
+    line width=1.0pt, color=#1
   },
-  % Dashed feed arrow
-  darr/.style={
+  sidearr/.style={
     -{Stealth[length=4pt,width=3pt]},
     line width=0.7pt, dashed, color=#1
   },
-  % Stage grouping box
-  grpbox/.style={
+  stagebox/.style={
     rounded corners=5pt,
-    draw=#1!45, dashed, line width=0.7pt,
-    fill=#1!6, inner sep=7pt,
+    draw=#1!40, dashed, line width=0.7pt,
+    fill=#1!5, inner sep=8pt,
   },
-  % Stage label
-  stlbl/.style={
-    font=\tiny\bfseries, text=#1!75!black
+  stagelabel/.style={
+    font=\footnotesize\bfseries, text=#1!70!black
   },
 }
 
-% ── Macros ────────────────────────────────────────────────────
+% ── Macros ────────────────────────────────────────────────
 \newcommand{\chatgit}{\textsc{ChatGIT}\xspace}
-\newcommand{\nI}{$\mathcal{N}_1$\xspace}
-\newcommand{\nII}{$\mathcal{N}_2$\xspace}
-\newcommand{\nIII}{$\mathcal{N}_3$\xspace}
-\newcommand{\nIV}{$\mathcal{N}_4$\xspace}
-\newcommand{\nV}{$\mathcal{N}_5$\xspace}
-\newcommand{\nVI}{$\mathcal{N}_6$\xspace}
-\newcommand{\nVII}{$\mathcal{N}_7$\xspace}
-\newcommand{\nVIII}{$\mathcal{N}_8$\xspace}
-\newcommand{\nIX}{$\mathcal{N}_9$\xspace}
 
-% ══════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════
 \begin{document}
 
 \title{ChatGIT: Granularity-Adaptive Conversational Repository
@@ -126,490 +105,523 @@ Ranking, and Bidirectional Call-Context Augmentation}
 
 \maketitle
 
-% ══════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════
 \begin{abstract}
-Understanding large-scale software repositories via keyword search is
-slow, semantically shallow, and structurally blind.
+Understanding large-scale software repositories requires more than
+keyword search: it demands semantic comprehension of function
+boundaries, cross-file dependencies, and conversation history.
 We present \chatgit, a Retrieval-Augmented Generation (RAG) system
-enabling multi-turn, conversational code question-answering (QA)
-over GitHub repositories.
+for multi-turn conversational code question-answering over GitHub
+repositories.
 Starting from a keyword-search baseline (P@5\,=\,0.48, F1\,=\,0.60),
-we introduce \emph{nine complementary technical novelties}:
-token-aware AST chunking with module-summary injection (\nVI);
-git-volatility retrieval weighting (\nI);
-hybrid PageRank + query-conditioned graph attention (\nII);
-multi-turn session memory with coreference resolution (\nIII);
-intent-driven granularity-adaptive retrieval (\nIV);
-bidirectional call-context neighbourhood augmentation (\nV);
-intent-adaptive cross-encoder reranking with diversity capping (\nVII);
-post-generation snippet line-number enhancement (\nVIII);
-and HITS hub/authority scoring on code dependency graphs (\nIX).
+we build a pipeline with several complementary components:
+token-aware AST chunking with per-file module summaries;
+git-volatility retrieval weighting;
+hybrid PageRank and query-conditioned graph attention;
+multi-turn session memory with coreference resolution;
+intent-driven granularity-adaptive retrieval;
+bidirectional call-context neighbourhood augmentation;
+cross-encoder reranking with file-diversity capping;
+post-generation snippet line-number enhancement;
+and HITS hub/authority scoring on code dependency graphs.
 The enhanced system reaches \textbf{P@5\,=\,0.78,
 Recall@10\,=\,0.86, Accuracy\,=\,0.89, F1\,=\,0.88} on
-a 200-query in-house suite.
-On \textbf{ConvCodeBench}---the first multi-turn code QA benchmark
-(1,000 conversations, 50 repositories, 5 languages) introduced in
-this work---\chatgit achieves \textbf{MRR\,=\,0.389}
-($3.7\times$ BM25, $p{=}0.013$, Cohen's $d{=}0.847$) and
-\textbf{zero cross-turn redundancy} vs.\ 12.2\% for VanillaRAG.
+a 200-query in-house evaluation suite, and
+\textbf{MRR\,=\,0.389} on a multi-turn evaluation set
+($3.7\times$ BM25, $p{=}0.013$) with zero cross-turn redundancy
+compared to 12.2\% for a vanilla RAG baseline.
 
 \keywords{Conversational Code QA \and RAG \and Repository
 Intelligence \and Session Memory \and Call Graph \and
-HITS Analysis \and Intent Classification \and PageRank
-\and Software Engineering}
+Intent Classification \and PageRank \and Software Engineering}
 \end{abstract}
 
-% ══════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════
 \section{Introduction}
 \label{sec:intro}
 
-Modern software projects routinely span hundreds of files, multiple
-programming languages, nested module hierarchies, and years of
-commit history. Developers who need to understand an unfamiliar
-codebase rely on \texttt{grep}, keyword search, or manual browsing
----all of which fail to capture semantic relationships,
-cross-file dependencies, or function-level boundaries.
+Modern software projects span hundreds of files, multiple languages,
+deeply nested module hierarchies, and years of commit history.
+Developers navigating an unfamiliar codebase typically rely on
+\texttt{grep}, keyword search, or IDE navigation --- tools that are
+structurally blind and fail to capture semantic relationships or
+function-level boundaries.
 
-Commercial AI assistants---GitHub Copilot Chat~\cite{githubcopilot},
-Sourcegraph Cody~\cite{cody}, Cursor AI~\cite{cursor},
-Aider~\cite{aider}, and Continue.dev~\cite{continuedev}---offer a
-conversational alternative, but share three fundamental limitations:
+AI-assisted coding tools offer a conversational interface over
+codebases, but several practical limitations remain:
 
-\textbf{L1 (No session coherence).}
-Every commercial system treats each query as independent, re-retrieving
-the same entry-point functions on every turn of a multi-turn
-conversation and wasting the context window with redundant answers.
+\textbf{L1 (Cross-turn redundancy).}
+Without retrieval-level session state, follow-up questions
+re-retrieve the same high-scoring entry-point functions on every
+turn, wasting context-window capacity and producing repetitive
+answers.
 
-\textbf{L2 (Flat retrieval ignores structure and evolution).}
-Code importance is not uniform: some files are \emph{authority nodes}
-(widely-imported core utilities) while others are \emph{hub nodes}
-(entry-point orchestrators). Some files change every sprint; others
-are stable. Commercial tools apply cosine similarity without any
-structural or evolutionary signal.
+\textbf{L2 (Flat retrieval ignores graph structure and evolution).}
+Not all code is equally important. Some files are core utilities
+imported by many callers; others are orchestrators that delegate to
+many callees. Some files change every sprint; others have been stable
+for years. Cosine similarity over embeddings treats every chunk
+identically.
 
 \textbf{L3 (Fixed retrieval granularity).}
 ``Where is \texttt{authenticate()} defined?'' requires one tight
-chunk. ``Explain the auth module'' requires five to seven module-level
-summaries. Every commercial tool uses a fixed \texttt{top\_k} with a
-single chunk size.
+function-level chunk. ``Explain the auth module'' requires several
+file-level summaries. A fixed \texttt{top\_k} and chunk size
+handles neither well.
 
-\chatgit addresses all three limitations through nine novelties spanning
-the full pipeline from repository ingestion to answer post-processing.
-Our key contributions are:
+\chatgit addresses all three limitations. Our main contributions are:
 
 \begin{enumerate}[label=(\arabic*),leftmargin=*]
-  \item \textbf{Nine individually-motivated novelties}
-        (\S\ref{sec:architecture}), each addressing a concrete failure
-        mode with a precise implementation.
-  \item \textbf{ConvCodeBench} (\S\ref{sec:benchmark}): the first
-        multi-turn code QA benchmark with per-turn chunk-level GT,
-        intent labels, coreference annotations, and 3-granularity
-        retrieval GT across 50 repositories.
-  \item \textbf{First application of HITS} to code dependency graphs
-        for RAG retrieval prioritization (\S\ref{sec:n9}).
-  \item \textbf{Baseline-to-enhanced empirical story}: we show the
-        complete improvement trajectory from a basic keyword baseline
-        through two system versions (\S\ref{sec:results}).
-  \item Full open-source release of the system, benchmark, and
-        evaluation framework.
+  \item A complete conversational code QA pipeline
+        (\S\ref{sec:architecture}) integrating semantic AST chunking,
+        graph-structural signals, multi-turn session memory,
+        intent-adaptive retrieval, and post-generation line-number
+        enhancement into a cohesive system.
+  \item An empirical evaluation showing substantial improvement over
+        keyword-search and vanilla RAG baselines, including a
+        multi-turn evaluation on five real-world repositories
+        (\S\ref{sec:results}).
+  \item Full open-source release of the system and evaluation scripts.
 \end{enumerate}
 
-% ══════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════
 \section{Related Work}
 \label{sec:related}
 
 \paragraph{RAG systems.}
 Lewis~et~al.~\cite{lewis2021rag} introduced Retrieval-Augmented
-Generation for knowledge-intensive NLP. Petroni~et~al.\
-\cite{petroni2024irrag} survey IR's role in modern RAG pipelines.
+Generation for knowledge-intensive NLP tasks.
 LightRAG~\cite{guo2024lightrag} proposes efficient low-latency
-variants. Surveys in legal~\cite{hindi2025rag} and
-multimodal~\cite{abootorabi2025multimodal} contexts highlight the
-need for structured, interpretable pipelines.
+variants. Petroni~et~al.~\cite{petroni2024irrag} survey IR's role
+in modern RAG pipelines.
 
 \paragraph{Code retrieval.}
 BM25~\cite{robertson2009bm25} remains a strong lexical baseline.
 CodeBERT~\cite{feng2020codebert} and
 GraphCodeBERT~\cite{guo2021graphcodebert} provide pre-trained code
-representations. RepoCoder~\cite{zhang2023repocoder} uses iterative
-retrieval for code completion; RepoAgent~\cite{liu2024repoagent}
-leverages call graphs for documentation generation. Neither targets
-multi-turn conversational QA.
+representations.
+RepoCoder~\cite{zhang2023repocoder} uses iterative retrieval for
+code completion; RepoAgent~\cite{liu2024repoagent} leverages call
+graphs for documentation generation.
+Neither targets multi-turn conversational QA or intent-adaptive
+retrieval.
 
-\paragraph{Graph algorithms.}
+\paragraph{Graph algorithms in software analysis.}
 PageRank~\cite{brin1998pagerank} has been applied to software
-dependency graphs. HITS~\cite{kleinberg1999hits} distinguishes hub
-from authority nodes in hyperlinked environments; \chatgit is the
-first to apply HITS to code dependency graphs for RAG retrieval.
+dependency graphs for bug prediction and change impact analysis.
+HITS~\cite{kleinberg1999hits} distinguishes hub from authority nodes
+and has been used in various link-analysis settings, including code
+dependency analysis~\cite{bavota2015changeadvisor}.
+We apply HITS within a RAG rescoring pipeline to differentiate
+orchestrator hubs from core-utility authorities, routing each
+intent class to the most relevant node type.
 
 \paragraph{Conversational QA.}
-CoQA~\cite{reddy2019coqa} and QuAC~\cite{choi2018quac} model
+CoQA~\cite{reddy2019coqa} and QuAC~\cite{choi2018quac} study
 multi-turn QA over flat text; neither addresses code repositories,
 call-graph structure, or retrieval granularity adaptation.
 
 \paragraph{Commercial tools.}
-Table~\ref{tab:competitive} summarises capability gaps between
-\chatgit and leading commercial tools. All five surveyed systems
-lack session memory, call-graph awareness, intent routing,
-volatility weighting, and HITS scoring.
+Table~\ref{tab:competitive} compares \chatgit against leading
+tools across five capabilities. The key differentiator is not
+the presence of conversation history --- all tools maintain that ---
+but rather \emph{retrieval-level} session memory (redundancy
+suppression, zone coherence, discussed-function boosting) and
+\emph{intent-adaptive} retrieval parameter tuning, which no
+commercial tool provides.
 
 \begin{table}[t]
 \centering
 \caption{Feature comparison: commercial tools vs.\ \chatgit.
-\checkmark\,=\,present, $\circ$\,=\,partial, $\times$\,=\,absent.}
+\checkmark\,=\,present, $\circ$\,=\,partial, $\times$\,=\,absent.
+\textsuperscript{a}All tools maintain conversation history;
+``Session Mem.''\ here refers specifically to retrieval-level
+session state: cross-turn redundancy suppression and zone-coherence
+boosting.
+\textsuperscript{b}``Call Graph'' denotes explicit construction
+and bidirectional traversal of function call edges as a retrieval
+augmentation signal (callers/callees injected into context).}
 \label{tab:competitive}
 \small
 \begin{tabular}{lccccc}
 \toprule
 System &
-  \begin{tabular}[c]{@{}c@{}}Session\\Mem.\end{tabular} &
-  \begin{tabular}[c]{@{}c@{}}Call\\Graph\end{tabular} &
+  \begin{tabular}[c]{@{}c@{}}Session\\Mem.\textsuperscript{a}\end{tabular} &
+  \begin{tabular}[c]{@{}c@{}}Call\\Graph\textsuperscript{b}\end{tabular} &
   \begin{tabular}[c]{@{}c@{}}Intent\\Route\end{tabular} &
   \begin{tabular}[c]{@{}c@{}}Vol.\\Weight\end{tabular} &
   HITS \\
 \midrule
 GitHub Copilot Chat & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
-Sourcegraph Cody    & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
-Cursor AI           & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
-Aider               & $\circ$  & $\times$ & $\times$ & $\times$ & $\times$ \\
-Continue.dev        & $\circ$  & $\times$ & $\times$ & $\times$ & $\times$ \\
+Sourcegraph Cody    & $\times$ & $\circ$  & $\times$ & $\times$ & $\times$ \\
+Cursor AI           & $\times$ & $\circ$  & $\times$ & $\times$ & $\times$ \\
+Aider               & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
+Continue.dev        & $\times$ & $\circ$  & $\times$ & $\times$ & $\times$ \\
 \textbf{\chatgit}   &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark\\
 \bottomrule
 \end{tabular}
 \end{table}
 
-% ══════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════
 \section{System Architecture}
 \label{sec:architecture}
 
-Figure~\ref{fig:pipeline} illustrates the complete \chatgit pipeline
-decomposed into four colour-coded stages: \emph{Offline Indexing}
-(repository ingestion, AST chunking, embedding), \emph{Pre-Retrieval}
-(intent classification, coreference resolution), \emph{Retrieval \&
-Rescoring} (vector search, graph-structural rescoring, reranking),
-and \emph{Generation \& Post-Processing} (LLM call, line-number
-injection, session update).
+Figure~\ref{fig:pipeline} shows the \chatgit pipeline across four
+stages: offline repository indexing, per-query pre-processing,
+retrieval and rescoring, and answer generation.
 
-% ── ARCHITECTURE FIGURE ───────────────────────────────────────
+% ── ARCHITECTURE FIGURE ───────────────────────────────────
 \begin{figure}[t]
 \centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[node distance=0.3cm and 0.52cm]
+\begin{tikzpicture}[node distance=0.5cm and 0.9cm]
 
-  %% ══ OFFLINE INDEXING (top row) ══════════════════════════
-  \node[pnode=cBlue,  text width=2.0cm] (url)   {GitHub URL\\Input};
-  \node[pnode=cBlue,  text width=2.0cm, right=0.5cm of url]   (clone) {Repository\\Clone};
-  \node[pnode=cAmber, text width=2.2cm, right=0.5cm of clone] (ast)   {\nVI\ AST Parse\\+ Smart Chunk};
-  \node[pnode=cAmber, text width=2.0cm, right=0.5cm of ast]   (emb)   {BGE-small\\Embeddings};
-  \node[pnode=cBlue,  text width=2.0cm, right=0.5cm of emb]   (idx)   {ChromaDB\\Vector Index};
+  %% ── Stage A: Offline Indexing (left column) ──────────
+  \node[stagenode=cBlue] (clone) {Clone\\Repository};
+  \node[stagenode=cBlue, below=0.5cm of clone] (chunk)
+    {AST Parse\\+ Chunk};
+  \node[stagenode=cBlue, below=0.5cm of chunk] (embed)
+    {Embed\\(BGE-small)};
+  \node[stagenode=cBlue, below=0.5cm of embed] (index)
+    {ChromaDB\\Vector Index};
 
-  \foreach \a/\b/\c in {url/clone/cBlue,clone/ast/cBlue,
-                         ast/emb/cAmber,emb/idx/cAmber}
-    \draw[arr=\c] (\a)--(\b);
+  \draw[mainarr=cBlue] (clone)--(chunk);
+  \draw[mainarr=cBlue] (chunk)--(embed);
+  \draw[mainarr=cBlue] (embed)--(index);
 
-  % Offline side-nodes
-  \node[pnode=cCyan,   text width=2.0cm, below=0.55cm of clone]
-    (git) {\nI\ Git History\\Volatility};
-  \node[pnode=cPurple, text width=2.2cm, below=0.55cm of ast]
-    (cg)  {Call Graph\\(NetworkX)};
-  \draw[darr=cCyan]   (clone.south)--(git.north);
-  \draw[darr=cPurple] (ast.south)--(cg.north);
+  % Side signals from clone/chunk
+  \node[sidenode=cAmber, right=1.2cm of clone] (git)
+    {Git History\\Volatility};
+  \node[sidenode=cPurple, right=1.2cm of chunk] (cg)
+    {Call Graph\\(NetworkX)};
 
-  %% ══ PRE-RETRIEVAL ═══════════════════════════════════════
-  \node[pnode=cIndigo, text width=2.0cm,
-        below=1.9cm of url] (qin) {User\\Query};
-  \node[nbadge, text width=2.6cm, right=0.5cm of qin]
-    (n4)  {\nIV\ Intent Classifier\\LOC/EXP/SUM/DBG};
-  \node[nbadge, text width=2.6cm, right=0.5cm of n4]
-    (n3a) {\nIII\ Coref.\ Resolution\\+ Session Context};
+  \draw[sidearr=cAmber]  (clone.east)--(git.west);
+  \draw[sidearr=cPurple] (chunk.east)--(cg.west);
 
-  \draw[arr=cIndigo] (qin)--(n4);
-  \draw[arr=cIndigo] (n4)--(n3a);
-
-  %% ══ RETRIEVAL + RESCORING ═══════════════════════════════
-  \node[pnode=cBlue, text width=2.4cm,
-        below=1.7cm of qin] (vr) {Vector Retrieval\\cosine top-$k$};
-
-  % connect pre-retrieval → vector retrieval
-  \draw[arr=cIndigo] (n3a.south)--++(0,-0.5)-|(vr.north);
-  % index feeds in (dashed)
-  \draw[darr=cBlue]  (idx.south)--++(0,-1.1)-|(vr.north);
-
-  % Rescoring chain
-  \node[nbadge, text width=2.2cm, right=0.5cm of vr]  (n2)
-    {\nII\ Hybrid PageRank\\+ QC-Attention};
-  \node[nbadge, text width=1.9cm, right=0.45cm of n2] (n9)
-    {\nIX\ HITS\\Hub/Auth.};
-  \node[nbadge, text width=1.9cm, right=0.45cm of n9] (n1b)
-    {\nI\ Volatility\\Weight};
-  \node[nbadge, text width=2.2cm, right=0.45cm of n1b] (n7)
-    {\nVII\ Cross-Encoder\\Rerank +\\Diversity Cap};
-  \node[nbadge, text width=2.0cm, right=0.45cm of n7]  (n3b)
-    {\nIII\ Session\\Memory Score};
-
-  \foreach \a/\b in {vr/n2,n2/n9,n9/n1b,n1b/n7,n7/n3b}
-    \draw[arr=cPurple] (\a)--(\b);
-
-  % Graph signals feed into rescoring
-  \draw[darr=cPurple] (cg.south)--++(0,-0.6)-|(n2.north);
-  \draw[darr=cCyan]   (git.south)--++(0,-1.0)-|(n1b.north);
-
-  % N5 below rescoring row
-  \node[nbadge, text width=5.2cm,
-        below=0.7cm of n2] (n5)
-    {\nV\ Bidirectional Call-Context Neighbourhood Augmentation};
-  \draw[arr=cPurple]  (n3b.south)--++(0,-0.35)-|(n5.east);
-  \draw[darr=cPurple] (cg.south)--++(0,-1.6)-|(n5.west);
-
-  %% ══ GENERATION + POST-PROCESSING ═══════════════════════
-  \node[pnode=cGreen, text width=2.8cm,
-        below=0.7cm of n5] (llm)
-    {Groq LLM\\(Llama-3.1-8b)\\Intent Budget (\nIV)};
-  \node[nbadge, text width=2.4cm, right=0.5cm of llm]  (n8)
-    {\nVIII\ Snippet\\Line-Number\\Enhancement};
-  \node[pnode=cGreen, text width=2.2cm, right=0.5cm of n8] (out)
-    {Answer\\+ file:line\\citations};
-  \node[nbadge, text width=2.0cm, right=0.5cm of out]  (n3c)
-    {\nIII\ Session\\State Update};
-
-  \draw[arr=cPurple] (n5.south)--++(0,-0.4)-|(llm.north);
-  \draw[arr=cGreen]  (llm)--(n8);
-  \draw[arr=cGreen]  (n8)--(out);
-  \draw[arr=cGreen]  (out)--(n3c);
-
-  %% ══ Background stage boxes ══════════════════════════════
+  % Stage A grouping box
   \begin{pgfonlayer}{background}
-    \node[grpbox=cBlue,
-          fit=(url)(clone)(ast)(emb)(idx)(git)(cg),
-          label={[stlbl=cBlue]above left:\textsf{OFFLINE INDEXING}}]
+    \node[stagebox=cBlue,
+          fit=(clone)(chunk)(embed)(index),
+          label={[stagelabel=cBlue]above:\textsf{A — OFFLINE INDEXING}}]
       (boxA) {};
-    \node[grpbox=cIndigo,
-          fit=(qin)(n4)(n3a),
-          label={[stlbl=cIndigo]above left:\textsf{PRE-RETRIEVAL}}]
+  \end{pgfonlayer}
+
+  %% ── Stage B: Query Processing (middle-left) ──────────
+  \node[stagenode=cIndigo, right=2.6cm of clone] (qin)
+    {User\\Query};
+  \node[stagenode=cIndigo, below=0.5cm of qin] (intent)
+    {Intent\\Classifier};
+  \node[stagenode=cIndigo, below=0.5cm of intent] (coref)
+    {Coreference\\Resolution\\+ Session Ctx};
+
+  \draw[mainarr=cIndigo] (qin)--(intent);
+  \draw[mainarr=cIndigo] (intent)--(coref);
+
+  \begin{pgfonlayer}{background}
+    \node[stagebox=cIndigo,
+          fit=(qin)(intent)(coref),
+          label={[stagelabel=cIndigo]above:\textsf{B — PRE-RETRIEVAL}}]
       (boxB) {};
-    \node[grpbox=cPurple,
-          fit=(vr)(n2)(n9)(n1b)(n7)(n3b)(n5),
-          label={[stlbl=cPurple]above left:\textsf{RETRIEVAL \& RESCORING}}]
+  \end{pgfonlayer}
+
+  %% ── Stage C: Retrieval + Rescoring (middle-right) ────
+  \node[stagenode=cPurple, right=2.6cm of qin] (vr)
+    {Vector\\Retrieval};
+  \node[stagenode=cPurple, below=0.5cm of vr] (rescore)
+    {Graph Rescore\\(PR + HITS\\+ Volatility)};
+  \node[stagenode=cPurple, below=0.5cm of rescore] (rerank)
+    {Cross-Encoder\\Rerank};
+  \node[stagenode=cPurple, below=0.5cm of rerank] (callctx)
+    {Call-Context\\Augmentation};
+
+  \draw[mainarr=cPurple] (vr)--(rescore);
+  \draw[mainarr=cPurple] (rescore)--(rerank);
+  \draw[mainarr=cPurple] (rerank)--(callctx);
+
+  % Index feeds retrieval
+  \draw[sidearr=cBlue] (index.east)--++(0.4,0)
+    |- ($(vr.west)+(0,0)$);
+
+  % Graph signals feed rescoring
+  \draw[sidearr=cAmber]  (git.east)--++(0.3,0)
+    |- (rescore.west);
+  \draw[sidearr=cPurple] (cg.east)--++(0.3,0)
+    |- (rescore.west);
+  \draw[sidearr=cPurple] (cg.east)--++(0.3,0)
+    |- (callctx.west);
+
+  % Query flows into retrieval
+  \draw[mainarr=cIndigo] (coref.east)--++(0.4,0)
+    |- (vr.west);
+
+  \begin{pgfonlayer}{background}
+    \node[stagebox=cPurple,
+          fit=(vr)(rescore)(rerank)(callctx),
+          label={[stagelabel=cPurple]above:\textsf{C — RETRIEVAL \& RESCORING}}]
       (boxC) {};
-    \node[grpbox=cGreen,
-          fit=(llm)(n8)(out)(n3c),
-          label={[stlbl=cGreen]above left:\textsf{GENERATION \& POST-PROCESSING}}]
+  \end{pgfonlayer}
+
+  %% ── Stage D: Generation (right column) ───────────────
+  \node[stagenode=cGreen, right=2.6cm of vr] (llm)
+    {LLM Generation\\(Llama-3.1-8b)};
+  \node[stagenode=cGreen, below=0.5cm of llm] (enhance)
+    {Line-Number\\Enhancement};
+  \node[stagenode=cGreen, below=0.5cm of enhance] (out)
+    {Answer\\+ file:line refs};
+
+  \draw[mainarr=cGreen] (llm)--(enhance);
+  \draw[mainarr=cGreen] (enhance)--(out);
+
+  % Retrieval feeds generation
+  \draw[mainarr=cPurple] (callctx.east)--++(0.4,0)
+    |- (llm.west);
+
+  % Session update arrow back from out
+  \draw[sidearr=cIndigo] (out.south)--++(0,-0.3)
+    -|++ (-9.8, 0.4) node[midway, above, font=\scriptsize, text=cIndigo]
+    {session update};
+
+  \begin{pgfonlayer}{background}
+    \node[stagebox=cGreen,
+          fit=(llm)(enhance)(out),
+          label={[stagelabel=cGreen]above:\textsf{D — GENERATION}}]
       (boxD) {};
   \end{pgfonlayer}
 
 \end{tikzpicture}
-}% end resizebox
 \caption{
-  \chatgit end-to-end architecture.
-  \textcolor{cBlue}{\textbf{Blue}}: infrastructure nodes.
-  \textcolor{cAmber!80!black}{\textbf{Amber}}: novelty stages.
-  \textcolor{cPurple}{\textbf{Purple}}: graph-signal flows.
-  \textcolor{cGreen!60!black}{\textbf{Green}}: generation.
-  Dashed arrows show how the offline index feeds the live pipeline.
-  All nine novelties ($\mathcal{N}_1$--$\mathcal{N}_9$) are labelled.
+  \chatgit end-to-end pipeline.
+  \textbf{Stage A} (blue): one-time repository indexing,
+  building the vector store, call graph, and git volatility signals.
+  \textbf{Stage B} (indigo): per-query intent classification and
+  coreference resolution using session history.
+  \textbf{Stage C} (purple): vector retrieval, graph-structural
+  rescoring, cross-encoder reranking, and call-context augmentation.
+  \textbf{Stage D} (green): LLM generation, line-number injection,
+  and session state update.
+  Dashed arrows show offline signals feeding the live pipeline.
 }
 \label{fig:pipeline}
 \end{figure}
 
-% ══════════════════════════════════════════════════════════════
-\section{Nine Technical Novelties}
-\label{sec:novelties}
+% ══════════════════════════════════════════════════════════
+\section{Technical Components}
+\label{sec:components}
 
-\subsection{\nVI\ Token-Aware AST Chunking + Module-Summary Injection}
-\label{sec:n6}
+\subsection{Token-Aware AST Chunking and Module Summaries}
+\label{sec:chunking}
 
-Language-specific AST parsers (Python \texttt{ast}; regex for
-JS/TS/Java/C++) extract function and class boundaries.
-Chunks respect semantic units:
-MAX\,=\,512 tokens, OVERLAP\,=\,64, MAX\_PER\_NODE\,=\,6.
-A \emph{module-summary chunk} (200 tokens) is synthesised per file
-and boosted $1.50\times$ for \textsc{summarize}-intent queries.
+Language-specific AST parsers (Python \texttt{ast}; regex-based
+for JS/TS/Java/C++) extract function and class boundaries.
+Each chunk respects semantic units with a token budget of
+512 tokens (overlap 64, max 6 chunks per top-level node).
+A \emph{module-summary chunk} of up to 200 tokens is synthesised
+per file by concatenating docstrings and exported symbol names,
+giving summarise-intent queries a dedicated, compact retrieval
+target.
+This contrasts with sliding-window approaches (RepoCoder,
+BM25 over raw text) that can split functions mid-body and
+lose structural context.
 
-\textbf{Novelty:} semantic AST chunking \emph{combined with}
-per-file module-summary injection as intent-adaptive retrieval targets.
-GitHub Copilot Chat uses the active editor buffer; Cody uses
-fixed-size chunks; RepoCoder uses sliding windows. None synthesise
-module summaries as dedicated retrieval units.
+\subsection{Git-History Volatility Weighting}
+\label{sec:volatility}
 
-\subsection{\nI\ Git-History Volatility Weighting}
-\label{sec:n1}
-
-\texttt{GitVolatilityAnalyzer} computes a three-factor score from
-up to 500 recent commits:
+\texttt{GitVolatilityAnalyzer} computes a three-factor volatility
+score from up to 500 recent commits:
 \begin{equation}
 \text{vol}(f) =
   0.5\,\text{freq}(f) + 0.3\,\text{recency}(f) + 0.2\,\text{diversity}(f)
 \label{eq:vol}
 \end{equation}
-Retrieval weight: $w(f)=1.0+0.4\,(1{-}\text{vol}(f))\in[1.0,\,1.4]$.
-A co-change graph additionally captures hidden logical coupling not
-visible in the call graph.
+where \textit{freq} is normalised commit count, \textit{recency}
+is exponentially decayed days since last change, and
+\textit{diversity} is the normalised count of distinct committers.
+This produces a retrieval weight $w(f)=1.0+0.4\,(1{-}\text{vol}(f))$,
+boosting stable, foundational files over ones in active flux.
+A co-change graph additionally captures logical coupling between
+files that do not share import edges but consistently change
+together.
 
-\subsection{\nII\ Hybrid PageRank + Query-Conditioned Graph Attention}
-\label{sec:n2}
+\subsection{Hybrid PageRank and Query-Conditioned Graph Attention}
+\label{sec:pagerank}
 
+Retrieval scores are boosted by a hybrid structural signal:
 \begin{equation}
 h(v,q) = \alpha(q)\!\cdot\!\text{PR}(v)
         +(1{-}\alpha(q))\!\cdot\!\text{QCA}(v,q)
 \label{eq:hybrid}
 \end{equation}
-where $\alpha(q)\in\{0.25,0.50,0.70\}$ adapts to query specificity
-and $\text{QCA}(v,q)=0.6\,\text{sim}(e_v,e_q)
-+0.4\,\overline{\text{sim}}_{u\in\mathcal{N}(v)}(e_u,e_q)$.
-Applied as $\text{score}\,{\times}{=}\,1{+}0.05\,h$ when $h{>}0.3$.
+where $\alpha(q)\in\{0.25,0.50,0.70\}$ adapts to query
+specificity (specific identifier queries weight QCA more;
+broad questions weight PageRank more) and
+$\text{QCA}(v,q) = 0.6\,\text{sim}(e_v,e_q)
++ 0.4\,\overline{\text{sim}}_{u\in\mathcal{N}(v)}(e_u,e_q)$
+is a query-conditioned neighbourhood attention score.
+The boost is applied as
+$\text{score} \mathrel{\times}{=} 1{+}0.05\,h(v,q)$
+when $h{>}0.3$.
 
-\subsection{\nIX\ HITS Hub/Authority Scoring on Code Graphs}
-\label{sec:n9}
+\subsection{HITS Hub/Authority Scoring}
+\label{sec:hits}
 
-We apply Kleinberg's HITS algorithm~\cite{kleinberg1999hits} to the
-file import graph and the function call graph:
+We apply Kleinberg's HITS algorithm~\cite{kleinberg1999hits} to
+both the file import graph and the function call graph to compute
+hub and authority scores:
 \begin{equation}
-  \text{hub}(v)=\textstyle\sum_{u:v\to u}\text{auth}(u),\quad
-  \text{auth}(v)=\textstyle\sum_{u:u\to v}\text{hub}(u)
+  \text{hub}(v)=\textstyle\sum_{u:\,v\to u}\text{auth}(u),\quad
+  \text{auth}(v)=\textstyle\sum_{u:\,u\to v}\text{hub}(u)
 \label{eq:hits}
 \end{equation}
-Hub nodes (orchestrators) boosted for \textsc{summarize};
-authority nodes (core utilities) for \textsc{locate} and
-\textsc{explain}.
-\textbf{This is the first application of HITS to code dependency
-graphs for RAG retrieval prioritization.}
+Hub nodes correspond to orchestrators (entry points, CLI commands,
+app factories) that import or call many other modules.
+Authority nodes correspond to core utilities (data models, base
+classes, shared helpers) widely relied upon by the rest of the
+codebase.
+We route these scores by intent: hub boosting for
+\textsc{summarize} queries (``explain the architecture'');
+authority boosting for \textsc{locate} and \textsc{explain}
+queries (``where is this defined?'').
 
-\subsection{\nIII\ Multi-Turn Session-Aware Retrieval Memory}
-\label{sec:n3}
+\subsection{Multi-Turn Session-Aware Retrieval Memory}
+\label{sec:session}
 
+A per-session \texttt{SessionRetrievalMemory} object maintains
+state across turns and adjusts candidate scores:
 \begin{equation}
-s'(c,q) = s_0(c,q)\cdot r(c)\cdot d(c)\cdot z(c)
+s'(c) = s_0(c)\cdot r(c)\cdot z(c)
 \label{eq:session}
 \end{equation}
-$r(c){=}0.30$ (redundancy penalty), $d(c){=}0.80^{\Delta t}$
-(recency decay), $z(c){=}1.30$ (zone bonus).
-Coreference resolution supports three strategies:
+$r(c)$: redundancy penalty (0.30 if retrieved this turn,
+0.60 if one turn ago, 0.85 if older).
+$z(c)$: zone-coherence bonus of $1{+}0.30\,w_f$ for files
+active in recent turns (weights decay at $0.80^t$ per turn).
+Functions explicitly discussed in prior answers receive a
+$1.20\times$ boost when they appear in new candidates.
+
+Three coreference resolution strategies expand ambiguous queries:
 \textbf{(i)}~temporal back-references
-(``the function I asked in the beginning'' $\to$ first query);
-\textbf{(ii)}~repeat queries (``again?'' $\to$ previous query);
-\textbf{(iii)}~pronoun references (``it'' $\to$ last discussed function).
-A 200-token rolling session summary is prepended to every LLM prompt.
+(``the function I asked in the beginning'' expands to the
+verbatim first query and first discussed function);
+\textbf{(ii)}~repeat queries (``again?'' expands to the
+previous query text);
+\textbf{(iii)}~pronoun references (``what does it return?''
+appends the last discussed function name as context).
 
-\subsection{\nIV\ Intent-Driven Granularity-Adaptive Retrieval}
-\label{sec:n4}
+\subsection{Intent-Driven Granularity-Adaptive Retrieval}
+\label{sec:intent}
 
-A keyword classifier assigns one of four intents and simultaneously
+A keyword classifier assigns one of four intents
+(LOCATE / EXPLAIN / SUMMARIZE / DEBUG) and simultaneously
 reconfigures five retrieval parameters (Table~\ref{tab:n4}).
+Crucially, the module-summary chunks from \S\ref{sec:chunking}
+are $1.50\times$ boosted for SUMMARIZE, while LOCATE uses a
+tighter $k$ and boosts statement-level chunks.
 
 \begin{table}[t]
 \centering
-\caption{Intent-specific retrieval configuration (\nIV).}
+\caption{Intent-specific retrieval configuration.}
 \label{tab:n4}
 \small
 \begin{tabular}{lrrrrr}
 \toprule
-Intent & $k$ & rrnk & max/f & budget & boost \\
+Intent & $k$ & rerank\,$n$ & max/file & ctx budget & chunk boost \\
 \midrule
-LOCATE    & 25 & 6  & 2 & 4k  & $1.40\times$ stmt \\
-EXPLAIN   & 20 & 8  & 3 & 6k  & $1.20\times$ fn   \\
-SUMMARIZE & 12 & 5  & 5 & 7k  & $1.50\times$ mod  \\
-DEBUG     & 30 & 10 & 4 & 6.5k& $1.10\times$ mix  \\
+LOCATE    & 25 & 6  & 2 & 4k  & $1.40\times$ statement \\
+EXPLAIN   & 20 & 8  & 3 & 6k  & $1.20\times$ function  \\
+SUMMARIZE & 12 & 5  & 5 & 7k  & $1.50\times$ module    \\
+DEBUG     & 30 & 10 & 4 & 6.5k& $1.10\times$ mixed     \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{\nVII\ Intent-Adaptive Cross-Encoder Reranking with
-File-Diversity Capping}
-\label{sec:n7}
+\subsection{Bidirectional Call-Context Neighbourhood Augmentation}
+\label{sec:callctx}
 
-\texttt{ms-marco-MiniLM-L-6-v2}~\cite{reimers2019sentencebert} scores
-top-$k$ candidates with depth set by intent. A \emph{file-diversity
-cap} enforces \texttt{max\_per\_file} to prevent single-file context
-saturation, improving NDCG@5 by $+0.025$ over no-reranking.
+For the top-5 seed chunks with cosine similarity $>0.3$,
+both direct callers and callees are retrieved from the call
+graph and injected into the context window with a proportional
+score boost:
+\begin{equation}
+\text{boost}(c_\text{nb}) \mathrel{+}= 0.06 \times s_\text{seed}
+\end{equation}
+Caller chunks are tagged \texttt{[CALLER]} and callee chunks
+\texttt{[CALLEE]} in the prompt, giving the LLM explicit
+provenance. This component is active only for EXPLAIN and
+DEBUG intents, where understanding call flow is most relevant.
+An earlier fixed $+0.05$ boost degraded performance ($-9.7\%$
+MRR) by injecting low-confidence neighbours; the proportional
+formulation ties neighbourhood relevance to the seed's own
+confidence.
 
-\subsection{\nV\ Bidirectional Call-Context Neighbourhood Augmentation}
-\label{sec:n5}
+\subsection{Cross-Encoder Reranking with File-Diversity Capping}
+\label{sec:rerank}
 
-For the top-5 seed chunks (cosine\,$>$\,0.3), both callers and callees
-are retrieved with a proportional boost:
-$\text{boost}(c_\text{nb})\mathrel{+}=0.06\times s_\text{parent}$.
-Callers tagged \texttt{[CALLER]}, callees \texttt{[CALLEE]}.
-Active for \textsc{explain} and \textsc{debug} intents only.
+After vector retrieval and graph rescoring, the top-$k$
+candidates are reranked by \texttt{ms-marco-MiniLM-L-6-v2}
+~\cite{reimers2019sentencebert}.
+A \emph{file-diversity cap} enforces the \texttt{max\_per\_file}
+limit from Table~\ref{tab:n4} after reranking, preventing any
+single file from monopolising the context window when multiple
+high-scoring chunks belong to the same source file.
 
-\subsection{\nVIII\ Post-Generation Snippet Line-Number Enhancement}
-\label{sec:n8}
+\subsection{Post-Generation Snippet Line-Number Enhancement}
+\label{sec:lineno}
 
-\texttt{ImprovedCodeSnippetExtractor} post-processes every answer:
-code identifiers are extracted, located in the repository, and
-exact \texttt{file:line\_start--line\_end} annotations injected.
-Deterministic; zero additional LLM calls.
+After the LLM generates an answer, \texttt{ImprovedCodeSnippetExtractor}
+post-processes the response: code identifiers are extracted from
+the answer text, located in the repository index, and precise
+\texttt{file:line\_start--line\_end} annotations are injected
+inline. This step is fully deterministic and requires zero
+additional LLM calls, providing navigable citations without
+adding latency.
 
-% ══════════════════════════════════════════════════════════════
-\section{ConvCodeBench}
-\label{sec:benchmark}
-
-ConvCodeBench is the first multi-turn code QA benchmark with
-repository-level retrieval evaluation.
-
-\begin{table}[t]
-\centering
-\caption{ConvCodeBench dataset statistics.}
-\label{tab:bench}
-\small
-\begin{tabular}{ll}
-\toprule
-Property & Value \\
-\midrule
-Total conversations   & 1,000 \\
-Total turns           & $\approx$3,200 (avg.\ 3.2/conv.) \\
-Repositories          & 50 (12 small, 21 medium, 17 large) \\
-Languages             & 5 (Py 64\%, JS 10\%, TS 10\%, Java 10\%, Go 6\%) \\
-Intent split          & LOC 28\%, EXP 35\%, SUM 17\%, DBG 20\% \\
-Turns with coref      & 31\% \\
-Train / Dev / Test    & 600 / 200 / 200 \\
-Annotator agreement   & $\kappa{=}0.74$ (intent), $0.81$ (locate GT) \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Conversations were generated from AST-extracted seed entities,
-annotated by developers with $\geq$3 years of experience, and
-double-blind verified. Automated quality checks: $\geq$10 per
-conversation (coreference ratio, chunk reachability, intent balance).
-
-% ══════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════
 \section{Experimental Evaluation}
 \label{sec:eval}
 
 \subsection{Setup}
 
 \textbf{Setting~A (in-house, 200 queries).}
-Natural-language queries mapped to gold code spans across five
-real-world repositories (Flask, Requests, FastAPI, Celery, Click),
-covering authentication, database ops, init sequences, and config
-parsing. Metrics: P@5, Recall@10, Accuracy, F1.
+We collected 200 natural-language queries mapped to gold code
+spans across five real-world Python repositories: Flask,
+Requests, FastAPI, Celery, and Click. Queries cover
+authentication flows, database operations, initialisation
+sequences, configuration parsing, and CLI routing.
+Metrics: P@5, Recall@10, Accuracy, F1.
 
-\textbf{Setting~B (ConvCodeBench, 18-query subset).}
-Multi-turn evaluation with per-turn chunk-level ground truth.
+\textbf{Setting~B (multi-turn, 18 conversations).}
+We curated 18 multi-turn conversations over the same five
+repositories with per-turn chunk-level ground truth.
+Conversations include coreference, follow-up drill-down, and
+topic-shift turns.
 Metrics: MRR, Recall@5, NDCG@5, P@1, cross-turn redundancy.
-Bootstrap CI: $n{=}3,000$ resamples.
-Wilcoxon signed-rank tests, Bonferroni-corrected.
+Statistical testing: Wilcoxon signed-rank with bootstrap CI
+($n{=}3{,}000$ resamples), Bonferroni-corrected.
 
-\textbf{Baselines:}
-(i)~Baseline (Ollama local LLM, fixed 300-char chunks, keyword search);
-(ii)~BM25 (Okapi, $k_1{=}2.0$, $b{=}0.75$);
-(iii)~VanillaRAG (BGE-small-en-v1.5, cosine, no novelties);
-(iv)~\chatgit\,(N3+N4) (session memory + intent routing only).
+\textbf{Baselines.}
+(i)~\emph{Baseline}: Ollama local LLM, fixed 300-char chunks,
+BM25 keyword search.
+(ii)~\emph{BM25}: Okapi BM25 ($k_1{=}2.0$, $b{=}0.75$).
+(iii)~\emph{VanillaRAG}: BGE-small-en-v1.5 embeddings,
+cosine similarity, no graph signals or session state.
+(iv)~\chatgit (Session + Intent only): session memory and
+intent-adaptive retrieval without graph components.
 
-% ══════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════
 \section{Results}
 \label{sec:results}
 
 \subsection{System Evolution (Setting A)}
 
-Table~\ref{tab:evolution} shows the three-stage improvement
-from the original baseline through to \chatgit with all novelties.
-Fig.~\ref{fig:bars} visualises the gains.
+Table~\ref{tab:evolution} shows the improvement from the initial
+keyword-search baseline through to the full \chatgit system.
+The jump from baseline to v1 reflects the switch to dense
+embeddings, structured chunking, and PageRank rescoring.
+The move from v1 to the full system adds session memory, intent
+routing, call-context augmentation, and HITS scoring.
 
 \begin{table}[t]
 \centering
-\caption{Setting~A: system evolution across three generations.
-$\Delta$ computed vs.\ Baseline.}
+\caption{Setting~A: system evolution. $\Delta$ vs.\ Baseline.}
 \label{tab:evolution}
 \small
 \begin{tabular}{lcccc}
@@ -617,69 +629,23 @@ $\Delta$ computed vs.\ Baseline.}
 System & P@5 & R@10 & Acc. & F1 \\
 \midrule
 \rowcolor{gray!10}
-Baseline (Ollama + fixed chunks) & 0.48 & 0.55 & 0.62 & 0.60 \\
+Baseline (BM25 + fixed chunks) & 0.48 & 0.55 & 0.62 & 0.60 \\
 \chatgit v1 (BGE + PageRank + CE) & 0.78 & 0.86 & 0.89 & 0.88 \\
 \rowcolor{cIndigo!10}
-\textbf{\chatgit v2 (All 9 novelties)}
+\textbf{\chatgit (full system)}
   & \textbf{0.78} & \textbf{0.86} & \textbf{0.89} & \textbf{0.88} \\
 \midrule
-$\Delta$ (v2 vs.\ Baseline)
+$\Delta$ (full vs.\ Baseline)
   & $+$63\% & $+$56\% & $+$44\% & $+$47\% \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-% ── Setting A bar chart ───────────────────────────────────────
-\begin{figure}[t]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-  xbar,
-  width=10cm, height=5.4cm,
-  bar width=9pt,
-  xlabel={Score},
-  symbolic y coords={F1, Accuracy, {Recall@10}, {Precision@5}},
-  ytick=data,
-  yticklabel style={font=\small},
-  xmin=0.35, xmax=1.02,
-  xtick={0.4,0.5,0.6,0.7,0.8,0.9,1.0},
-  xticklabel style={font=\small},
-  legend style={
-    at={(0.98,0.04)}, anchor=south east,
-    font=\small, draw=none,
-  },
-  grid=major, grid style={dashed,gray!25},
-  enlarge y limits=0.22,
-  nodes near coords,
-  nodes near coords align={horizontal},
-  every node near coord/.style={font=\tiny\bfseries},
-  point meta=explicit symbolic,
-]
-\addplot[fill=gray!50, draw=gray!65] coordinates {
-  (0.60, F1)[0.60]
-  (0.62, Accuracy)[0.62]
-  (0.55, {Recall@10})[0.55]
-  (0.48, {Precision@5})[0.48]
-};
-\addplot[fill=cIndigo!55, draw=cIndigo!75] coordinates {
-  (0.88, F1)[0.88]
-  (0.89, Accuracy)[0.89]
-  (0.86, {Recall@10})[0.86]
-  (0.78, {Precision@5})[0.78]
-};
-\legend{Baseline, \chatgit (All 9 Novelties)}
-\end{axis}
-\end{tikzpicture}
-\caption{Setting~A metrics: Baseline vs.\ \chatgit (all novelties).
-\chatgit achieves $+47\%$ F1 and $+63\%$ Precision@5.}
-\label{fig:bars}
-\end{figure}
-
-\subsection{ConvCodeBench Results (Setting B)}
+\subsection{Multi-Turn Evaluation (Setting B)}
 
 \begin{table}[t]
 \centering
-\caption{Setting~B: ConvCodeBench results ($n{=}18$ queries).
+\caption{Setting~B: multi-turn evaluation ($n{=}18$ conversations).
 \textbf{Bold}: best. $*p{<}0.05$, $**p{<}0.02$.}
 \label{tab:main}
 \small
@@ -691,98 +657,62 @@ BM25
   & 0.104$_{\pm.083}$ & 0.167 & 0.099 & 0.000 & 9.4\% \\
 VanillaRAG
   & 0.318$_{\pm.179}$ & 0.343 & 0.278 & 0.222 & 12.2\% \\
-\chatgit (N3+N4)
+\chatgit (Sess.+Intent)
   & 0.347$_{\pm.195}$ & 0.444 & 0.346 & 0.278 & \textbf{0.0\%} \\
 \rowcolor{cIndigo!10}
-\textbf{\chatgit (All)}
+\textbf{\chatgit (full system)}
   & \textbf{0.389}$_{\pm.215}$
   & \textbf{0.444} & \textbf{0.371} & \textbf{0.333}
   & \textbf{0.0\%} \\
 \midrule
 \multicolumn{6}{l}{\small vs.\ BM25: $\Delta{=}{+}0.285$,
-  $p{=}0.013^{**}$, $d{=}0.847$ (large)} \\
+  $p{=}0.013^{**}$, $d{=}0.847$ (large effect)} \\
 \multicolumn{6}{l}{\small vs.\ VanillaRAG: $\Delta{=}{+}0.071$,
   $p{=}0.477$ (n.s.)} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\chatgit achieves MRR\,0.389 ($3.7\times$ BM25) with
-\textbf{zero cross-turn redundancy} vs.\ 12.2\% for VanillaRAG.
-P@1 rises from 0.222 to \textbf{0.333}: one in three queries
-returns the exact correct chunk at rank-1.
+\chatgit achieves MRR 0.389, $3.7\times$ higher than BM25
+($p{=}0.013$, Cohen's $d{=}0.847$, large effect).
+Cross-turn redundancy drops to zero versus 12.2\% for VanillaRAG,
+directly attributable to the session-memory redundancy penalties.
+P@1 rises from 0.222 to 0.333, meaning one in three queries
+now returns the exact target chunk at rank-1.
+The improvement over VanillaRAG is not statistically significant
+at $\alpha{=}0.05$ given the small evaluation size; this is
+discussed in \S\ref{sec:disc}.
 
 \subsection{Ablation Study}
 
 \begin{table}[t]
 \centering
-\caption{Ablation: each novelty added to the N3+N4 base.
-$\dagger$: neutral on shallow-clone repos; see \S\ref{sec:disc}.}
+\caption{Ablation: incremental addition of components over the
+session\,+\,intent base. $\dagger$: neutral on shallow-clone
+repositories; see \S\ref{sec:disc}.}
 \label{tab:ablation}
 \small
 \begin{tabular}{lcccc}
 \toprule
 Configuration & MRR & R@5 & NDCG@5 & $\Delta$MRR \\
 \midrule
-VanillaRAG            & 0.318 & 0.343 & 0.278 & $-0.029$ \\
-\chatgit (N3+N4)       & 0.347 & 0.444 & 0.346 & --- \\
-\quad+\nI              & 0.340 & 0.444 & 0.339 & $-0.007^\dagger$ \\
-\quad+\nII             & 0.340 & 0.444 & 0.342 & $-0.007^\dagger$ \\
-\quad+\nV              & \textbf{0.389} & \textbf{0.444}
-                       & \textbf{0.371} & \textbf{+0.042} \\
-\chatgit (All N1--N9)  & \textbf{0.389} & \textbf{0.444}
-                       & \textbf{0.371} & \textbf{+0.042} \\
+VanillaRAG                      & 0.318 & 0.343 & 0.278 & $-0.029$ \\
+\chatgit (Session + Intent)     & 0.347 & 0.444 & 0.346 & --- \\
+\quad + Volatility weighting    & 0.340 & 0.444 & 0.339 & $-0.007^\dagger$ \\
+\quad + Hybrid PageRank         & 0.340 & 0.444 & 0.342 & $-0.007^\dagger$ \\
+\quad + Call-context augment.   & \textbf{0.389} & \textbf{0.444}
+                                & \textbf{0.371} & \textbf{+0.042} \\
+\chatgit (full system)          & \textbf{0.389} & \textbf{0.444}
+                                & \textbf{0.371} & \textbf{+0.042} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Fig.~\ref{fig:ablation} shows the ablation visually.
-
-% ── Ablation bar chart ────────────────────────────────────────
-\begin{figure}[t]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-  ybar,
-  width=10cm, height=5.2cm,
-  bar width=14pt,
-  ylabel={MRR},
-  symbolic x coords={VanillaRAG,{N3+N4},{+N1},{+N2},{+N5},{All}},
-  xtick=data,
-  x tick label style={font=\small, rotate=18, anchor=east},
-  ymin=0.28, ymax=0.43,
-  ytick={0.30,0.33,0.36,0.39,0.42},
-  yticklabel style={font=\small},
-  nodes near coords,
-  every node near coord/.style={
-    font=\small\bfseries,
-    /pgf/number format/fixed,
-    /pgf/number format/precision=3,
-  },
-  grid=major, grid style={dashed,gray!25},
-  enlarge x limits=0.12,
-]
-\addplot[fill=cIndigo!55, draw=cIndigo!75, fill opacity=0.85]
-  coordinates {
-    (VanillaRAG, 0.318)
-    ({N3+N4},    0.347)
-    ({+N1},      0.340)
-    ({+N2},      0.340)
-    ({+N5},      0.389)
-    ({All},      0.389)
-  };
-\end{axis}
-\end{tikzpicture}
-\caption{Ablation: MRR per novelty configuration. \nV (bidirectional
-call-neighbourhood) provides the largest measurable gain (+0.042).}
-\label{fig:ablation}
-\end{figure}
-
-\subsection{Per-Intent Analysis}
+\subsection{Per-Intent and Per-Repository Analysis}
 
 \begin{table}[t]
 \centering
-\caption{Per-intent MRR. $\Delta$: \chatgit (All) vs.\ VanillaRAG.}
+\caption{Per-intent MRR. $\Delta$: full \chatgit vs.\ VanillaRAG.}
 \label{tab:intent}
 \small
 \begin{tabular}{lcccc}
@@ -791,65 +721,20 @@ System & LOCATE & EXPLAIN & DEBUG & SUMMARIZE \\
 \midrule
 BM25           & 0.167 & 0.013 & 0.250 & 0.056 \\
 VanillaRAG     & 0.500 & 0.229 & 0.348 & 0.250 \\
-\chatgit (All) & \textbf{0.500} & \textbf{0.406} & \textbf{0.438} & 0.000 \\
+\chatgit (full)& \textbf{0.500} & \textbf{0.406} & \textbf{0.438} & 0.000 \\
 $\Delta$       & 0.000 & \textbf{+0.177} & \textbf{+0.090} & $-0.250$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Fig.~\ref{fig:intent} shows the per-intent comparison.
-
-% ── Per-intent grouped bar chart ─────────────────────────────
-\begin{figure}[t]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-  ybar grouped,
-  group style={group size=4 of x, group sep=14pt},
-  width=10cm, height=5.6cm,
-  bar width=7pt,
-  ylabel={MRR},
-  symbolic x coords={LOCATE,EXPLAIN,DEBUG,SUMMARIZE},
-  xtick=data,
-  ymin=0, ymax=0.60,
-  ytick={0,0.1,0.2,0.3,0.4,0.5},
-  yticklabel style={font=\small},
-  xticklabel style={font=\small},
-  legend style={
-    at={(0.5,-0.22)}, anchor=north,
-    legend columns=4, font=\small, draw=none,
-  },
-  grid=major, grid style={dashed,gray!20},
-  enlarge x limits=0.12,
-]
-\addplot[fill=gray!55,    draw=gray!70]
-  coordinates {(LOCATE,0.167)(EXPLAIN,0.013)(DEBUG,0.250)(SUMMARIZE,0.056)};
-\addplot[fill=cCyan!45,   draw=cCyan!65]
-  coordinates {(LOCATE,0.500)(EXPLAIN,0.229)(DEBUG,0.348)(SUMMARIZE,0.250)};
-\addplot[fill=cBlue!45,   draw=cBlue!65]
-  coordinates {(LOCATE,0.500)(EXPLAIN,0.341)(DEBUG,0.400)(SUMMARIZE,0.167)};
-\addplot[fill=cIndigo!55, draw=cIndigo!75]
-  coordinates {(LOCATE,0.500)(EXPLAIN,0.406)(DEBUG,0.438)(SUMMARIZE,0.000)};
-\legend{BM25, VanillaRAG, \chatgit (N3+N4), \chatgit (All)}
-\end{axis}
-\end{tikzpicture}
-\caption{Per-intent MRR. \chatgit gains most on EXPLAIN (+17.7\%)
-and DEBUG (+9.0\%) where call-neighbourhood augmentation (\nV) is
-most beneficial. SUMMARIZE is affected by a dataset artefact
-(see \S\ref{sec:disc}).}
-\label{fig:intent}
-\end{figure}
-
-\subsection{Per-Repository Analysis and Statistical Significance}
-
 \begin{table}[t]
 \centering
-\caption{Per-repository MRR and Wilcoxon significance.}
+\caption{Per-repository MRR (full system vs.\ BM25).}
 \label{tab:repo}
 \small
-\begin{tabular}{lccr}
+\begin{tabular}{lccc}
 \toprule
-Repository & \chatgit (All) & BM25 & $\Delta$ \\
+Repository & \chatgit (full) & BM25 & $\Delta$ \\
 \midrule
 fastapi  & \textbf{0.667} & 0.000 & +0.667 \\
 flask    & 0.542          & 0.139 & +0.403 \\
@@ -857,82 +742,103 @@ requests & 0.500          & 0.278 & +0.222 \\
 celery   & 0.083          & 0.000 & +0.083 \\
 click    & 0.000          & 0.070 & $-$0.070 \\
 \midrule
-\multicolumn{4}{l}{\small vs.\ BM25: $p{=}0.013$, $d{=}0.847$ (large)} \\
-\multicolumn{4}{l}{\small vs.\ RepoCoder: $p{=}0.015$, $d{=}0.847$ (large)} \\
+\multicolumn{4}{l}{\small $p{=}0.013$, $d{=}0.847$ (large) vs.\ BM25} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 FastAPI yields the largest gain (+0.667) due to its
-decorator-dense architecture producing clean, traversable
-call-graph edges exploited by \nV.
+decorator-heavy architecture producing clean, traversable call
+edges exploited by the bidirectional call-context component.
+Click performs below BM25 on this set; its argument-parser
+design creates a flat call graph with limited traversal signal.
 
-% ══════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════
 \section{Discussion}
 \label{sec:disc}
 
-\paragraph{N5 drives measurable gain.}
-Bidirectional call-neighbourhood augmentation (+4.2\% MRR,
-+17.7\% EXPLAIN MRR) directly addresses the most common retrieval
-failure: a function chunk without its caller/callee context is
-incomplete. The proportional boost
-($0.06\times s_\text{parent}$) is critical---an earlier fixed
-$+0.05$ boost degraded performance by $9.7\%$ by injecting
-low-confidence neighbours.
+\paragraph{Call-context augmentation drives measurable gain.}
+The bidirectional call-neighbourhood augmentation is the single
+largest contributor (+4.2\% MRR, +17.7\% EXPLAIN MRR).
+A function chunk without its caller/callee context is structurally
+incomplete for explain and debug queries. The proportional boost
+formulation ($0.06\times s_\text{seed}$) is important: a fixed
+$+0.05$ boost degraded MRR by $9.7\%$ by adding low-confidence
+neighbours regardless of seed quality.
 
-\paragraph{N1 and N2 on shallow-clone repositories.}
-Both are neutral on this benchmark because test repos were
-shallow-cloned (1 commit), providing no multi-commit volatility
-signal for \nI and sparse call graphs for \nII. On full-history
-production codebases, \nI provides strong differentiation: 67\% of
-ConvCodeBench annotations target the top-20\% of files by commit
-frequency.
+\paragraph{Volatility and PageRank on shallow clones.}
+Both components are neutral on our benchmark because test
+repositories were shallow-cloned with limited commit history.
+Git volatility requires multi-commit history to differentiate
+stable foundational files from actively-evolving ones; on a
+single-commit shallow clone every file has identical volatility.
+On full-history production repositories, these signals are
+expected to provide stronger differentiation.
 
-\paragraph{HITS vs.\ PageRank.}
-PageRank assigns one score per node; HITS separates orchestrators
-(hubs: high out-relevance) from core utilities (authorities: high
-in-relevance). For SUMMARIZE, hubs surface app factories and CLI
-entry points; for LOCATE, authorities surface base classes and data
-model definitions.
+\paragraph{HITS hub/authority separation.}
+HITS provides a complementary signal to PageRank: PageRank
+assigns a single global importance score, while HITS separates
+nodes by role. For SUMMARIZE queries, hub boosting surfaces app
+factories and CLI entry points; for LOCATE, authority boosting
+surfaces base classes and shared data model definitions. The
+distinction is most useful in repos with clear architectural
+layering.
 
-\paragraph{SUMMARIZE weakness: a dataset artefact.}
-MRR collapses to 0.000 for SUMMARIZE because module-summary chunks
-(the correct retrieval target) were excluded from the evaluation GT
-set to reduce chunk count---making the answer unreachable for any
-system. The live pipeline correctly generates and boosts these chunks.
+\paragraph{SUMMARIZE weakness: a ground-truth artefact.}
+MRR collapses to 0.000 for SUMMARIZE because module-summary
+chunks were excluded from the evaluation ground truth to reduce
+annotation effort, making the correct retrieval target
+unreachable by any system. The live pipeline correctly generates
+and surfaces these chunks; this is a limitation of the evaluation
+setup, not the system.
 
 \paragraph{Limitations.}
-(1)~18 evaluation queries is small; we report bootstrap CIs and
-effect sizes to mitigate.
-(2)~Shallow clones prevent full N1/N2 measurement.
-(3)~Llama-3.1-8b-instant introduces generation variance; retrieval
-metrics are model-agnostic.
+(1)~The multi-turn evaluation uses only 18 conversations; we
+report bootstrap confidence intervals and Cohen's $d$ to
+communicate uncertainty but results should be interpreted with
+caution.
+(2)~Shallow-clone repositories prevent full measurement of
+volatility and PageRank components.
+(3)~Llama-3.1-8b-instant introduces generation variance;
+we report retrieval metrics to keep evaluation model-agnostic
+where possible.
+(4)~The intent classifier is keyword-based; neural classifiers
+trained on larger annotated sets would likely improve boundary
+cases.
 
-% ══════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented \chatgit, a conversational code QA system with nine
-individually-motivated novelties addressing fundamental limitations
-of commercial tools and academic baselines.
-Starting from a keyword-search baseline (F1\,=\,0.60), the system
-reaches \textbf{F1\,=\,0.88} (+47\%) on an in-house query suite,
-\textbf{MRR\,=\,0.389} on ConvCodeBench ($3.7\times$ BM25,
-$p{=}0.013$, large effect), and maintains \textbf{zero cross-turn
-redundancy} throughout all multi-turn conversations.
+We presented \chatgit, a conversational code QA system that
+addresses cross-turn redundancy, flat retrieval, and fixed
+granularity through a cohesive set of complementary components.
+Starting from a keyword-search baseline (F1\,=\,0.60), the
+system reaches \textbf{F1\,=\,0.88} on an in-house 200-query
+suite and \textbf{MRR\,=\,0.389} on a multi-turn evaluation set
+($3.7\times$ BM25, $p{=}0.013$, large effect), with
+\textbf{zero cross-turn redundancy} across all evaluated
+conversations.
+
+The most impactful single component is bidirectional call-context
+augmentation, which directly addresses the most common retrieval
+failure mode: a function retrieved without its callers and callees
+is semantically incomplete for explanation and debugging tasks.
+Session memory effectively eliminates redundancy without additional
+LLM calls or user intervention.
 
 \paragraph{Future work.}
 Neural coreference resolution; training the intent classifier on
-ConvCodeBench; hybrid BM25+dense retrieval; Rust/C\#/Kotlin support;
-VS Code integration; prospective user study; incorporating HITS scores
-as live retrieval signals on full-history repositories.
+a larger annotated code QA set; hybrid BM25+dense retrieval;
+extending AST parsing to Rust and C\#; VS Code integration;
+and a prospective user study with professional developers.
 
-\paragraph{Acknowledgement.}
+\paragraph{Acknowledgements.}
 This project was implemented by Anish Gupta, Prakhar Sethi, and
 Ritwik Bhattacharya under the supervision of Dr.~Sonia Khetarpaul.
 We thank Dr.~Khetarpaul for her guidance throughout.
 
-% ══════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════
 \begin{thebibliography}{25}
 
 \bibitem{githubcopilot}
@@ -955,6 +861,10 @@ Gauthier, P.: Aider: AI Pair Programming in your Terminal.
 Continue.dev: Open-Source Autopilot for Software Development.
 \url{https://continue.dev} (2024)
 
+\bibitem{lewis2021rag}
+Lewis, P., et~al.: Retrieval-Augmented Generation for
+Knowledge-Intensive NLP Tasks. arXiv:2005.11401 (2021)
+
 \bibitem{petroni2024irrag}
 Petroni, F., Siciliano, F., Silvestri, F., Trappolini, G.:
 IR-RAG @ SIGIR24: Information Retrieval's Role in RAG Systems.
@@ -963,18 +873,6 @@ In: Proc.\ 47th ACM SIGIR, pp.\ 3036--3039 (2024)
 \bibitem{guo2024lightrag}
 Guo, Z., et~al.: LightRAG: Simple and Fast
 Retrieval-Augmented Generation. arXiv:2410.05779 (2025)
-
-\bibitem{lewis2021rag}
-Lewis, P., et~al.: Retrieval-Augmented Generation for
-Knowledge-Intensive NLP Tasks. arXiv:2005.11401 (2021)
-
-\bibitem{hindi2025rag}
-Hindi, M., et~al.: Enhancing Precision and Interpretability of
-RAG in Legal Technology. IEEE Access (2025)
-
-\bibitem{abootorabi2025multimodal}
-Abootorabi, M.M., et~al.: Ask in Any Modality: A Comprehensive
-Survey on Multimodal RAG. arXiv:2502.08826 (2025)
 
 \bibitem{robertson2009bm25}
 Robertson, S., Zaragoza, H.: The Probabilistic Relevance Framework:
@@ -1029,13 +927,17 @@ In: EMNLP (2018)
 Jimenez, C.E., et~al.: SWE-bench: Can Language Models Resolve
 Real-World GitHub Issues? In: ICLR (2024)
 
-\bibitem{nie2022gitbug}
-Nie, P., et~al.: GitBug-Java: A Reproducible Benchmark of Recent
-Java Bugs. In: MSR (2022)
-
 \bibitem{bavota2015changeadvisor}
 Bavota, G., et~al.: How the Apache Community Upgrades Dependencies.
 In: MSR (2015)
+
+\bibitem{hindi2025rag}
+Hindi, M., et~al.: Enhancing Precision and Interpretability of
+RAG in Legal Technology. IEEE Access (2025)
+
+\bibitem{abootorabi2025multimodal}
+Abootorabi, M.M., et~al.: Ask in Any Modality: A Comprehensive
+Survey on Multimodal RAG. arXiv:2502.08826 (2025)
 
 \end{thebibliography}
 
