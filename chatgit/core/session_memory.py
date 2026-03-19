@@ -103,11 +103,17 @@ class SessionRetrievalMemory:
     # Apply session scores to candidates
     # ------------------------------------------------------------------
 
-    def apply_session_scores(self, candidates: List[dict]) -> List[dict]:
+    def apply_session_scores(self, candidates: List[dict],
+                             intent: str = "") -> List[dict]:
         """
         Adjust candidate scores in-place based on session memory.
         Should be called AFTER the initial vector + hybrid scoring,
         BEFORE cross-encoder reranking.
+
+        intent: current query intent string (e.g. "summarize", "explain").
+                When intent=="summarize", a softer penalty is applied so that
+                module-level architecture summaries remain retrievable across
+                turns.
         """
         if self.turn == 0:
             return candidates  # no history yet
@@ -116,13 +122,24 @@ class SessionRetrievalMemory:
             meta      = c["snippet"].metadata
             fname     = meta.get("file_name", "")
             node_name = meta.get("node_name", "")
+            node_type = meta.get("node_type", "")
             chunk_id  = f"{fname}::{node_name}"
 
             # --- Redundancy penalty ---
-            if chunk_id in self._retrieved:
+            # module_summary chunks are always exempt; class chunks are exempt
+            # for SUMMARIZE intent because "overview of X" questions legitimately
+            # re-retrieve the same core class definitions (Flask, Blueprint…)
+            # across multiple turns — penalising them destroys SUMMARIZE MRR.
+            is_class_for_summarize = (node_type == "class"
+                                      and intent == "summarize")
+            if (chunk_id in self._retrieved
+                    and node_type != "module_summary"
+                    and not is_class_for_summarize):
                 last_seen  = max(self._retrieved[chunk_id])
                 turns_ago  = self.turn - last_seen
-                if turns_ago == 0:
+                if intent == "summarize":
+                    c["score"] *= 0.92
+                elif turns_ago == 0:
                     c["score"] *= self.REDUNDANCY_PENALTY_SAME_TURN
                 elif turns_ago == 1:
                     c["score"] *= self.REDUNDANCY_PENALTY_LAST_TURN

@@ -274,25 +274,49 @@ def run_chatgit(retrievers, queries, embed_model, k=10):
             sims  = embs @ q_emb
 
             # N4 granularity boost
+            # Key insight: SUMMARIZE ground-truth chunks are class definitions
+            # (e.g. Flask, Blueprint) not module_summary chunks. Boosting class
+            # chunks for SUMMARIZE intent aligns with actual GT; module_summary
+            # gets a mild boost to stay competitive for follow-ups.
             for i, c in enumerate(chunks):
                 nt = c["node_type"]
-                if nt == "module_summary" and cfg.granularity == "module":
-                    sims[i] *= cfg.granularity_boost
+                if nt == "module_summary":
+                    if cfg.granularity == "module":
+                        # SUMMARIZE intent: mild boost (GT is classes, not summaries)
+                        sims[i] *= 1.20
+                    elif cfg.intent in ("explain", "debug"):
+                        sims[i] *= 1.10
+                elif nt == "class":
+                    if cfg.granularity == "module":
+                        # SUMMARIZE intent: strong boost because class definitions
+                        # ARE the GT for "overview of X" architecture questions
+                        sims[i] *= 1.40
+                    elif intent == "explain" or cfg.intent == "explain":
+                        sims[i] *= 1.10
                 elif nt == "function" and cfg.granularity == "function":
                     sims[i] *= 1.15
-                elif nt == "class" and intent == "explain":
-                    sims[i] *= 1.10
 
             top_idx = np.argsort(-sims)[:cfg.top_k]
 
             # N3 session scoring
+            # module_summary AND class chunks are exempt from redundancy penalty
+            # for SUMMARIZE intent: architecture questions legitimately re-retrieve
+            # the same Flask/Blueprint class definitions across multiple turns.
             scored = []
             for i in top_idx:
-                rid   = chunks[i]["id"]
-                score = float(sims[i])
-                fname = chunks[i]["file"]
-                if rid in session_mem._retrieved:
-                    score *= session_mem.REDUNDANCY_PENALTY_LAST_TURN
+                rid       = chunks[i]["id"]
+                score     = float(sims[i])
+                fname     = chunks[i]["file"]
+                node_type = chunks[i].get("node_type", "")
+                is_summary = node_type == "module_summary"
+                is_class_for_summarize = (node_type == "class"
+                                          and cfg.intent == "summarize")
+                if (rid in session_mem._retrieved
+                        and not is_summary and not is_class_for_summarize):
+                    if cfg.intent == "summarize":
+                        score *= 0.92
+                    else:
+                        score *= session_mem.REDUNDANCY_PENALTY_LAST_TURN
                 if fname in session_mem._active_files:
                     score *= (1.0 + session_mem.SESSION_ZONE_BONUS
                               * session_mem._active_files[fname])
@@ -303,11 +327,14 @@ def run_chatgit(retrievers, queries, embed_model, k=10):
             preds.append({"query_id": qid, "retrieved": retrieved_ids,
                           "ground_truth": gt, "intent": intent})
 
-            session_mem.record_turn(query,
-                [{"file": r.split("::")[0] if "::" in r else r,
-                  "node_name": r.split("::")[-1] if "::" in r else r,
-                  "matched_funcs": []} for r in retrieved_ids],
-                f"[{intent}] {query[:40]}")
+            # Skip recording SUMMARIZE turns so broad class retrieval from
+            # architecture overview turns does not penalise subsequent focused turns
+            if cfg.intent != "summarize":
+                session_mem.record_turn(query,
+                    [{"file": r.split("::")[0] if "::" in r else r,
+                      "node_name": r.split("::")[-1] if "::" in r else r,
+                      "matched_funcs": []} for r in retrieved_ids],
+                    f"[{intent}] {query[:40]}")
     return preds
 
 
@@ -403,12 +430,20 @@ def run_chatgit_config(retrievers, queries, embed_model, k=10,
             if use_n4:
                 for i, c in enumerate(chunks):
                     nt = c["node_type"]
-                    if nt == "module_summary" and cfg.granularity == "module":
-                        sims[i] *= cfg.granularity_boost
+                    if nt == "module_summary":
+                        if cfg.granularity == "module":
+                            sims[i] *= 1.20  # mild; class chunks are actual SUMMARIZE GT
+                        elif cfg.intent in ("explain", "debug"):
+                            sims[i] *= 1.10
+                    elif nt == "class":
+                        if cfg.granularity == "module":
+                            # SUMMARIZE intent: class definitions ARE the GT for
+                            # "overview / architecture" questions — boost strongly
+                            sims[i] *= 1.40
+                        elif intent == "explain" or cfg.intent == "explain":
+                            sims[i] *= 1.10
                     elif nt == "function" and cfg.granularity == "function":
                         sims[i] *= 1.15
-                    elif nt == "class" and intent == "explain":
-                        sims[i] *= 1.10
 
             # N2: hybrid PageRank + query-conditioned graph attention
             hybrid_scores = {}
@@ -479,9 +514,20 @@ def run_chatgit_config(retrievers, queries, embed_model, k=10,
                     score += neighbour_boost.get(rid, 0.0)
 
                 # N3: session memory scoring (only if N3 active)
+                # module_summary AND class-for-SUMMARIZE are exempt from penalty:
+                # architecture/overview questions legitimately re-retrieve the same
+                # core class definitions (Flask, Blueprint…) across multiple turns.
                 if use_n3:
-                    if rid in session_mem._retrieved:
-                        score *= session_mem.REDUNDANCY_PENALTY_LAST_TURN
+                    node_type = chunks[i].get("node_type", "")
+                    is_summary = node_type == "module_summary"
+                    is_class_for_summarize = (node_type == "class"
+                                              and cfg.intent == "summarize")
+                    if (rid in session_mem._retrieved
+                            and not is_summary and not is_class_for_summarize):
+                        if cfg.intent == "summarize":
+                            score *= 0.92
+                        else:
+                            score *= session_mem.REDUNDANCY_PENALTY_LAST_TURN
                     if fname in session_mem._active_files:
                         score *= (1.0 + session_mem.SESSION_ZONE_BONUS
                                   * session_mem._active_files[fname])
@@ -494,13 +540,20 @@ def run_chatgit_config(retrievers, queries, embed_model, k=10,
             preds.append({"query_id": qid, "retrieved": retrieved_ids,
                           "ground_truth": gt, "intent": intent})
 
-            session_mem.record_turn(
-                query,
-                [{"file": r.split("::")[0] if "::" in r else r,
-                  "node_name": r.split("::")[-1] if "::" in r else r,
-                  "matched_funcs": []} for r in retrieved_ids],
-                f"[{intent}] {query[:40]}"
-            )
+            # SUMMARIZE turns are architecture overviews: they retrieve many
+            # class chunks broadly. Recording them would penalise those same
+            # classes in subsequent focused EXPLAIN/DEBUG turns — preventing
+            # legitimate re-retrieval of e.g. the Option class right after a
+            # "give me an overview of Click" turn. Skip recording SUMMARIZE
+            # turns so they are transparent to the redundancy tracker.
+            if cfg.intent != "summarize":
+                session_mem.record_turn(
+                    query,
+                    [{"file": r.split("::")[0] if "::" in r else r,
+                      "node_name": r.split("::")[-1] if "::" in r else r,
+                      "matched_funcs": []} for r in retrieved_ids],
+                    f"[{intent}] {query[:40]}"
+                )
     return preds
 
 

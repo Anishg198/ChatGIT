@@ -16,6 +16,9 @@ _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+# Pre-import torch on Windows to prevent c10.dll DLL initialization failure
+import torch  # noqa: F401 — must come before sentence_transformers / transformers
+
 import chatgit.core.chunker as _ck
 _ck._count_tokens = lambda text: len(text) // 4
 

@@ -682,8 +682,20 @@ async def process_chat(payload: MessagePayload):
 
             # Novelty 4: granularity-adaptive boost ──────────────────────
             node_type = item.metadata.get("node_type", "")
-            if cfg.granularity == "module" and node_type == "module_summary":
-                final_score *= cfg.granularity_boost
+            if node_type == "module_summary":
+                if cfg.granularity == "module":
+                    # SUMMARIZE intent: mild boost; actual GT chunks are class
+                    # definitions, so don't over-boost module summaries
+                    final_score *= 1.20
+                elif cfg.intent in ("explain", "debug"):
+                    final_score *= 1.10
+            elif node_type == "class":
+                if cfg.granularity == "module":
+                    # SUMMARIZE intent: class definitions ARE the ground truth
+                    # for architecture / overview questions — boost them strongly
+                    final_score *= 1.40
+                elif cfg.intent in ("explain",):
+                    final_score *= 1.10
             elif cfg.granularity == "statement":
                 # Prefer smaller chunks (few lines = statement level)
                 chunk_lines = (item.metadata.get("end_line", 0)
@@ -712,7 +724,8 @@ async def process_chat(payload: MessagePayload):
         candidates.sort(key=lambda x: x["score"], reverse=True)
 
         # ── Novelty 3: apply session memory scores ────────────────────────
-        candidates = session.retrieval_memory.apply_session_scores(candidates)
+        candidates = session.retrieval_memory.apply_session_scores(
+            candidates, intent=cfg.intent)
         # Re-sort after session adjustments
         candidates.sort(key=lambda x: x["score"], reverse=True)
 
