@@ -467,11 +467,11 @@ def run_chatgit_config(retrievers, queries, embed_model, k=10,
             )
 
             # N5: build call-graph neighbour boost map
-            # Only seed from top-5 highest-confidence chunks, and scale boost
-            # proportionally to parent similarity so low-confidence seeds don't
-            # propagate noise.
+            # Only useful for DEBUG queries where callers/callees reveal execution
+            # context. Disabled for LOCATE (need exact chunk) and EXPLAIN (neighbors
+            # add noise, not explanation depth).
             neighbour_boost = {}
-            if use_n5 and pagerank is not None:
+            if use_n5 and pagerank is not None and cfg.intent == "debug":
                 pre_top = np.argsort(-sims)[:5]   # only high-confidence seeds
                 for i in pre_top:
                     parent_sim = float(sims[i])
@@ -504,21 +504,29 @@ def run_chatgit_config(retrievers, queries, embed_model, k=10,
                 score = float(sims[i])
 
                 # N1: git volatility weight
+                # Apply always (not just recency_focused) — stable files get a
+                # small boost on fact/locate queries which is the common case.
                 if use_n1:
-                    score *= git_az.get_retrieval_weight(fname, recency_focused)
+                    score *= git_az.get_retrieval_weight(fname, recency_focused=False)
 
                 # N2: hybrid importance multiplicative boost
-                # Only apply when the node has a meaningful hybrid score (> 0.3),
-                # and use a small factor (0.05) to act as a gentle reranking nudge
-                # rather than a dominant signal.
-                if use_n2:
+                # Apply to nodes with meaningful hybrid score (> 0.1); use 0.10
+                # multiplier — visible against N4's 1.15x but not dominant.
+                # Only boosts for EXPLAIN/SUMMARIZE (PageRank hub = architecture
+                # context); skip for LOCATE/DEBUG where specific functions matter.
+                if use_n2 and cfg.intent in ("explain", "summarize"):
                     h = hybrid_scores.get(f"{fname}::{chunks[i]['node_name']}", 0.0)
-                    if h > 0.3:
-                        score *= (1.0 + 0.05 * h)
+                    if h > 0.1:
+                        score *= (1.0 + 0.10 * h)
 
-                # N5: call-neighbourhood additive boost
+                # N5: call-neighbourhood MULTIPLICATIVE boost
+                # Changed from additive (score += 0.048) to multiplicative so the
+                # boost scales with the chunk's existing confidence rather than
+                # distorting the embedding-similarity ranking scale.
                 if use_n5:
-                    score += neighbour_boost.get(rid, 0.0)
+                    nb = neighbour_boost.get(rid, 0.0)
+                    if nb > 0:
+                        score *= (1.0 + nb)
 
                 # N3: session memory scoring (only if N3 active)
                 # module_summary AND class-for-SUMMARIZE are exempt from penalty:
