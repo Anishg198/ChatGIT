@@ -49,7 +49,15 @@
       "Bash(ls /tmp/*bench)",
       "Bash(TOKENIZERS_PARALLELISM=false PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 python3 evaluation/run_full_eval.py 2>&1)",
       "Bash(find /Users/anishgupta/Desktop/ChatGIT -type f -name README* -o -name setup.py -o -name pyproject.toml -o -name requirements.txt -o -name Makefile -o -name .env*)",
-      "Bash(grep -E \"\\\\.\\(md|txt\\)$\")"
+      "Bash(grep -E \"\\\\.\\(md|txt\\)$\")",
+      "Read(//c/tmp//**)",
+      "Read(//c/Users/Prakhar/Documents//**)",
+      "Bash(source venv/Scripts/activate)",
+      "Bash(source venv/bin/activate)",
+      "Bash(pip show:*)",
+      "Bash(python:*)",
+      "Bash(CHATGIT_REPO_FLASK=\"C:/Users/Prakhar/Desktop/bench_repos/flask_bench\" CHATGIT_REPO_REQUESTS=\"C:/Users/Prakhar/Desktop/ChatGIT/requests_bench\" CHATGIT_REPO_CLICK=\"C:/Users/Prakhar/Desktop/ChatGIT/click_bench\" CHATGIT_REPO_FASTAPI=\"C:/Users/Prakhar/Desktop/bench_repos/fastapi_bench\" CHATGIT_REPO_CELERY=\"C:/Users/Prakhar/Desktop/ChatGIT/celery_bench\" python -m evaluation.run_convcodebench)",
+      "Bash(PYTHONIOENCODING=utf-8 CHATGIT_REPO_FLASK=\"C:/Users/Prakhar/Desktop/bench_repos/flask_bench\" CHATGIT_REPO_REQUESTS=\"C:/Users/Prakhar/Desktop/ChatGIT/requests_bench\" CHATGIT_REPO_CLICK=\"C:/Users/Prakhar/Desktop/ChatGIT/click_bench\" CHATGIT_REPO_FASTAPI=\"C:/Users/Prakhar/Desktop/bench_repos/fastapi_bench\" CHATGIT_REPO_CELERY=\"C:/Users/Prakhar/Desktop/ChatGIT/celery_bench\" python -m evaluation.run_convcodebench)"
     ]
   }
 }

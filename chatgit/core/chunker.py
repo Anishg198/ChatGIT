@@ -14,7 +14,21 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from llama_index.core import Document
+try:
+    from llama_index.core import Document          # llama_index >= 0.10 (namespaced packages)
+except (ImportError, OSError):
+    try:
+        from llama_index import Document           # llama_index < 0.10 (monolithic package)
+    except (ImportError, OSError):
+        class Document:                            # minimal shim when llama_index unavailable
+            """Minimal Document shim — same interface used by chunker.py."""
+            __slots__ = ("text", "metadata")
+            def __init__(self, text: str = "", metadata: dict = None):
+                self.text = text
+                self.metadata = metadata or {}
+            @property
+            def page_content(self) -> str:
+                return self.text
 
 try:
     import tiktoken

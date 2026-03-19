@@ -9,6 +9,12 @@ _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+# ── Pre-import torch to ensure DLL loads cleanly on Windows ──────────────────
+# On Windows, torch's c10.dll must be loaded before any other package (e.g.
+# transformers, llama_index) tries to import it as a transitive dependency.
+# Importing torch first guarantees it lands in sys.modules in a healthy state.
+import torch  # noqa: F401 — must come before any llama_index / transformers import
+
 # ── Patch tiktoken BEFORE importing chunker ───────────────────────────────────
 import chatgit.core.chunker as _ck
 _ck._count_tokens = lambda text: len(text) // 4   # simple fallback, no subprocesses
@@ -382,6 +388,7 @@ def run_chatgit_config(retrievers, queries, embed_model, k=10,
             if not use_n4:
                 from chatgit.core.intent_classifier import RetrievalConfig
                 cfg = RetrievalConfig(
+                    intent="explain",
                     top_k=20, rerank_n=8, max_per_file=3,
                     token_budget=6000, granularity="function",
                     granularity_boost=1.0, include_neighborhood=False,
@@ -662,7 +669,7 @@ def main():
         print(f"  {repo:<14}  {cg:>10.4f}  {bm:>8.4f}  {vr:>12.4f}  {cg-bm:>+12.4f}")
 
     # ── Redundancy rate (N3) ──────────────────────────────────────────────────
-    print(f"\n  REDUNDANCY RATE (↓ better — N3 effectiveness)")
+    print(f"\n  REDUNDANCY RATE (lower is better -- N3 effectiveness)")
     for name, preds in systems.items():
         rr = redundancy_rate(preds, sessions)
         print(f"  {name:<22}  {rr:.4f}")
