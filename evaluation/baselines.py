@@ -1,14 +1,20 @@
 """
 Baseline Retrieval Systems for ChatGIT Comparison.
 
-Implements the following state-of-the-art baselines ChatGIT is evaluated against:
+Implements the following baselines ChatGIT is evaluated against:
 
-  1. BM25           — classic lexical baseline (Robertson & Zaragoza, 2009)
-  2. VanillaRAG     — BGE embeddings + cosine similarity, no novelties
-  3. RepoCoder      — sliding-window + iterative retrieval (Zhang et al., 2023)
-  4. CodeBERT-BM25  — CodeBERT reranking of BM25 candidates (Feng et al., 2020)
-  5. GraphRAG-Code  — PageRank-weighted RAG without QC-attention or session memory
-  6. ChatGIT-Full   — our full system with all 5 novelties
+  1. BM25                — classic lexical baseline (Robertson & Zaragoza, 2009)
+  2. VanillaRAG          — BGE embeddings + cosine similarity, no novelties
+  3. BM25-SlidingWindow  — BM25 with one-round query augmentation from top snippet
+                           (NOTE: this is NOT RepoCoder from Zhang et al. 2023;
+                            RepoCoder is an iterative retrieval-generation loop
+                            for code *completion*, a different task. This baseline
+                            tests simple query augmentation on top of BM25.)
+  4. ConvAwareRAG        — VanillaRAG + previous query appended to current query;
+                           the simplest multi-turn-aware dense baseline; used to
+                           isolate the contribution of N3 (session memory)
+  5. GraphRAG-Code       — PageRank-weighted dense retrieval without QC-attention
+                           or session memory (ablated N2)
 
 Each baseline exposes:
     retrieve(query, chunks, k) -> List[str]  (ranked chunk IDs)
@@ -204,49 +210,106 @@ class VanillaRAG:
 
 
 # ===========================================================================
-# RepoCoder-style Baseline  (Zhang et al., NeurIPS 2023)
+# BM25-SlidingWindow Baseline
 # ===========================================================================
 
-class RepoCoderStyle:
+class BM25SlidingWindow:
     """
-    Simplified RepoCoder: iterative retrieval with sliding-window context.
+    BM25 with one round of query augmentation from the top retrieved snippet.
 
-    Original paper uses two rounds:
-      Round 1: retrieve with the raw query
-      Round 2: augment query with top-1 snippet, re-retrieve
+    This tests the hypothesis that appending the top snippet to the query
+    (a simple form of iterative retrieval) improves lexical retrieval.
+    It is NOT an implementation of RepoCoder (Zhang et al., NeurIPS 2023),
+    which is an iterative retrieval-generation loop for code *completion*,
+    a fundamentally different task from conversational QA.
 
-    Here we implement one augmentation round (sufficient for comparison).
-    Reference: Zhang et al. "RepoCoder: Repository-Level Code Completion
-    Through Iterative Retrieval and Generation." NeurIPS 2023.
+    We name this baseline honestly to avoid misattribution.
     """
     def __init__(self, base_retriever: Optional[Any] = None):
-        self._retriever = base_retriever or TFIDFRetriever()
+        self._retriever = base_retriever or BM25()
 
-    def fit(self, chunks: List[Dict[str, Any]]) -> "RepoCoderStyle":
+    def fit(self, chunks: List[Dict[str, Any]]) -> "BM25SlidingWindow":
         self._chunks_by_id = {c["id"]: c["text"] for c in chunks}
         self._retriever.fit(chunks)
         return self
 
     def retrieve_ids(self, query: str, k: int = 10) -> List[str]:
-        # Round 1
+        # Round 1: raw BM25
         round1 = self._retriever.retrieve_ids(query, k=max(k, 5))
         if not round1:
             return []
-
-        # Augment query with top snippet
+        # Augment: append top snippet (first 300 chars) to query
         top_snippet = self._chunks_by_id.get(round1[0], "")[:300]
         augmented_query = query + " " + top_snippet
-
-        # Round 2
+        # Round 2: re-retrieve with augmented query
         round2 = self._retriever.retrieve_ids(augmented_query, k=k)
-        # Merge: prefer round2 ranking, fill with round1
-        seen = set()
-        merged = []
+        # Merge: prefer round2, fill gaps with round1
+        seen: set = set()
+        merged: List[str] = []
         for cid in round2 + round1:
             if cid not in seen:
                 seen.add(cid)
                 merged.append(cid)
         return merged[:k]
+
+
+# Keep old name as alias for backward compatibility
+RepoCoderStyle = BM25SlidingWindow
+
+
+# ===========================================================================
+# ConvAwareRAG Baseline  (novel — used to isolate N3 contribution)
+# ===========================================================================
+
+class ConvAwareRAG:
+    """
+    Conversationally-aware VanillaRAG: appends the previous turn's query
+    to the current query before embedding.
+
+    This is the simplest multi-turn-aware dense baseline.  It answers the
+    question: "How much of ChatGIT's multi-turn gain comes from just
+    remembering the last question?"
+
+    Used to isolate the contribution of N3 (session-aware retrieval memory
+    with redundancy penalties and zone coherence bonuses) over and above
+    naive query concatenation.
+    """
+    def __init__(self, embed_fn: Optional[Callable[[str], np.ndarray]] = None):
+        self._embed_fn  = embed_fn
+        self._tfidf     = TFIDFRetriever()
+        self._chunk_ids: List[str] = []
+        self._embeddings: Optional[np.ndarray] = None
+
+    def fit(self, chunks: List[Dict[str, Any]]) -> "ConvAwareRAG":
+        self._chunk_ids = [c["id"] for c in chunks]
+        if self._embed_fn is not None:
+            embs  = np.stack([self._embed_fn(c["text"]) for c in chunks])
+            norms = np.linalg.norm(embs, axis=1, keepdims=True)
+            norms[norms == 0] = 1.0
+            self._embeddings = embs / norms
+        else:
+            self._tfidf.fit(chunks)
+        return self
+
+    def retrieve_ids(
+        self,
+        query: str,
+        k: int = 10,
+        prev_query: str = "",
+    ) -> List[str]:
+        """
+        Retrieve with query optionally augmented by previous turn's query.
+        Call with prev_query="" for turn 0, prev_query=last_query for turn >0.
+        """
+        augmented = f"{query} {prev_query}".strip() if prev_query else query
+        if self._embed_fn is not None and self._embeddings is not None:
+            q_emb = self._embed_fn(augmented)
+            q_emb = q_emb / (np.linalg.norm(q_emb) + 1e-9)
+            sims  = self._embeddings @ q_emb
+            top_idx = np.argsort(-sims)[:k]
+            return [self._chunk_ids[i] for i in top_idx]
+        else:
+            return self._tfidf.retrieve_ids(augmented, k)
 
 
 # ===========================================================================
@@ -299,11 +362,14 @@ class GraphRAGCode:
 # ===========================================================================
 
 BASELINE_REGISTRY: Dict[str, Any] = {
-    "BM25":           BM25,
-    "TF-IDF":         TFIDFRetriever,
-    "VanillaRAG":     VanillaRAG,
-    "RepoCoder":      RepoCoderStyle,
-    "GraphRAG-Code":  GraphRAGCode,
+    "BM25":                BM25,
+    "TF-IDF":              TFIDFRetriever,
+    "VanillaRAG":          VanillaRAG,
+    "ConvAwareRAG":        ConvAwareRAG,
+    "BM25-SlidingWindow":  BM25SlidingWindow,
+    "GraphRAG-Code":       GraphRAGCode,
+    # kept for backward compatibility
+    "RepoCoder":           BM25SlidingWindow,
 }
 
 
@@ -316,21 +382,23 @@ def build_all_baselines(
     Instantiate and fit all baselines on a given chunk set.
     Returns dict of {name: fitted_retriever}.
     """
-    bm25 = BM25().fit(chunks)
-    tfidf = TFIDFRetriever().fit(chunks)
-    vanilla = VanillaRAG(embed_fn=embed_fn).fit(chunks)
-    repocoder = RepoCoderStyle(base_retriever=TFIDFRetriever()).fit(chunks)
-    graphrag = GraphRAGCode(
+    bm25         = BM25().fit(chunks)
+    tfidf        = TFIDFRetriever().fit(chunks)
+    vanilla      = VanillaRAG(embed_fn=embed_fn).fit(chunks)
+    conv_aware   = ConvAwareRAG(embed_fn=embed_fn).fit(chunks)
+    bm25_sw      = BM25SlidingWindow(base_retriever=BM25()).fit(chunks)
+    graphrag     = GraphRAGCode(
         base_retriever=TFIDFRetriever(),
         pagerank_scores=pagerank_scores or {},
     ).fit(chunks)
 
     return {
-        "BM25":          bm25,
-        "TF-IDF":        tfidf,
-        "VanillaRAG":    vanilla,
-        "RepoCoder":     repocoder,
-        "GraphRAG-Code": graphrag,
+        "BM25":               bm25,
+        "TF-IDF":             tfidf,
+        "VanillaRAG":         vanilla,
+        "ConvAwareRAG":       conv_aware,
+        "BM25-SlidingWindow": bm25_sw,
+        "GraphRAG-Code":      graphrag,
     }
 
 
@@ -341,28 +409,37 @@ Baselines Used in ChatGIT Evaluation
 =====================================
 
 1. BM25 (Robertson & Zaragoza, 2009)
-   - Classic probabilistic term-frequency retrieval
-   - Parameters: k1=1.5, b=0.75
-   - No semantic understanding; strong lexical baseline
+   - Classic Okapi BM25 lexical retrieval; k1=2.0, b=0.75
+   - No semantic understanding; strong identifier-match baseline for code
+   - Stateless: no session memory, same k for every query
 
-2. VanillaRAG (dense retrieval)
-   - BGE-small-en-v1.5 embeddings + cosine similarity
-   - No reranking, no graph integration, no session memory
-   - Represents a standard off-the-shelf RAG pipeline
+2. VanillaRAG (BGE-small-en-v1.5)
+   - BGE-small-en-v1.5 dense embeddings + cosine similarity top-k
+   - No cross-encoder reranking, no graph signals, no session state
+   - Standard off-the-shelf RAG pipeline; the closest prior-work comparison
 
-3. RepoCoder (Zhang et al., NeurIPS 2023)
-   - Iterative retrieval with one-round query augmentation
-   - Sliding-window context from top retrieved snippet
-   - State-of-the-art for repository-level code completion
+3. ConvAwareRAG  [NEW — isolates N3 contribution]
+   - VanillaRAG but with the previous turn's query appended to the current query
+   - Simplest multi-turn-aware dense baseline
+   - Tests whether N3's gains come from naive query augmentation vs.
+     true session-aware scoring (redundancy penalties + zone coherence)
 
-4. GraphRAG-Code (based on GraphCodeBERT, Guo et al., ICLR 2021)
-   - Dense retrieval + static PageRank score reranking
-   - Ablated version of ChatGIT (N2 without QC-attention)
-   - Represents best prior graph-augmented RAG approach
+4. BM25-SlidingWindow
+   - BM25 with one round of query augmentation: appends the top retrieved
+     snippet (first 300 chars) to the query, then re-retrieves
+   - Tests simple iterative augmentation over a lexical retriever
+   - NOTE: distinct from RepoCoder (Zhang et al., NeurIPS 2023), which is
+     an iterative retrieval-generation loop for code *completion*
 
-5. ChatGIT (Ours — Full System)
-   - All 5 novelties: Git volatility (N1), Hybrid PageRank+QC-attention (N2),
-     Session-aware retrieval memory (N3), Intent-adaptive granularity (N4),
-     Bidirectional call-context neighborhood (N5)
-   - Cross-encoder reranking, diversity capping, token-budget management
+5. GraphRAG-Code (static PageRank reranking)
+   - Dense retrieval + multiplicative PageRank boost (alpha=0.3)
+   - Ablated version of ChatGIT N2 (no query-conditioned attention)
+   - Represents graph-augmented RAG without session state or intent routing
+
+6. ChatGIT (Ours — Full System)
+   - All 5 novelties: N1 (git volatility), N2 (hybrid PageRank+QC-attention),
+     N3 (session-aware retrieval memory), N4 (intent-adaptive granularity),
+     N5 (bidirectional call-context neighbourhood)
+   - Cross-encoder reranking (ms-marco-MiniLM-L-6-v2), diversity capping,
+     intent-specific token-budget management
 """

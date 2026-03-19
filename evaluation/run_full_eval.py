@@ -1,20 +1,23 @@
 """
-Full evaluation: ChatGIT vs RepoCoder and other baselines.
+Full evaluation: ChatGIT vs all baselines.
 Uses 150 real multi-turn conversations (30 per repo × 5 repos).
 
 Systems evaluated:
-  1. BM25                     — lexical baseline
-  2. RepoCoder (BM25 + iter.) — BM25 with one round of query augmentation
-  3. RepoCoder (BGE + iter.)  — dense RepoCoder (fair neural comparison)
-  4. VanillaRAG (BGE)         — dense, no graph signals, no session state
-  5. ChatGIT (Session+Intent) — N3+N4 only, no graph components
-  6. ChatGIT (Full)           — all components
+  1. BM25                      — lexical baseline
+  2. BM25-SlidingWindow        — BM25 with one round of query augmentation
+                                 (NOT RepoCoder; see baselines.py for distinction)
+  3. ConvAwareRAG              — VanillaRAG + previous query appended; isolates N3
+  4. VanillaRAG (BGE)          — dense, no graph signals, no session state
+  5. ChatGIT (Session+Intent)  — N3+N4 only, no graph components
+  6. ChatGIT (Full)            — all five novelties (N1-N5)
 
 Metrics: MRR, P@1, Recall@5, NDCG@5, cross-turn redundancy
 """
 
 import sys, os, json, time
-sys.path.insert(0, '/Users/anishgupta/Desktop/ChatGIT')
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
 # Patch tiktoken
 import chatgit.core.chunker as _ck
@@ -30,18 +33,24 @@ from chatgit.core.session_memory import SessionRetrievalMemory
 from chatgit.core.git_analyzer import GitVolatilityAnalyzer
 from chatgit.core.graph.pagerank import CodePageRankAnalyzer
 from chatgit.core.graph.hybrid_importance import HybridImportanceScorer
-from evaluation.baselines import BM25, RepoCoderStyle
+from evaluation.baselines import BM25, BM25SlidingWindow
 from evaluation.eval_retrieval import evaluate_retrieval, print_retrieval_report
 from evaluation.statistical_tests import full_comparison_report, print_comparison_table
 
+_REPO_BASE = os.environ.get("CHATGIT_REPO_BASE", "/tmp")
 REPOS = {
-    "flask":    "/tmp/flask_bench",
-    "requests": "/tmp/requests_bench",
-    "click":    "/tmp/click_bench",
-    "fastapi":  "/tmp/fastapi_bench",
-    "celery":   "/tmp/celery_bench",
+    "flask":    os.environ.get("CHATGIT_REPO_FLASK",    os.path.join(_REPO_BASE, "flask_bench")),
+    "requests": os.environ.get("CHATGIT_REPO_REQUESTS", os.path.join(_REPO_BASE, "requests_bench")),
+    "click":    os.environ.get("CHATGIT_REPO_CLICK",    os.path.join(_REPO_BASE, "click_bench")),
+    "fastapi":  os.environ.get("CHATGIT_REPO_FASTAPI",  os.path.join(_REPO_BASE, "fastapi_bench")),
+    "celery":   os.environ.get("CHATGIT_REPO_CELERY",   os.path.join(_REPO_BASE, "celery_bench")),
 }
-CONVERSATIONS_PATH = "data/convcodebench/eval_conversations.jsonl"
+REPOS = {k: v for k, v in REPOS.items() if os.path.isdir(v) or
+         print(f"  [SKIP] {k}: path not found ({v})", file=sys.stderr) or False}
+CONVERSATIONS_PATH = os.environ.get(
+    "CHATGIT_CONVS_PATH",
+    os.path.join(_project_root, "data", "convcodebench", "eval_conversations.jsonl")
+)
 SKIP_DIRS = {"tests", "test", "docs", "doc", "examples", "example",
              "__pycache__", ".git", "build", "dist"}
 
@@ -170,10 +179,11 @@ def build_index(all_chunks, embed_model):
 
         bm25 = BM25().fit(chunks)
 
-        # RepoCoder-style: BM25 base
-        repocoder_bm25 = RepoCoderStyle(base_retriever=BM25()).fit(chunks)
+        # BM25-SlidingWindow: BM25 with one round of query augmentation
+        # (NOTE: this is NOT RepoCoder from Zhang et al. 2023 — see baselines.py)
+        bm25sw_bm25 = BM25SlidingWindow(base_retriever=BM25()).fit(chunks)
 
-        # RepoCoder-style: BGE base (iterative dense retrieval)
+        # BM25-SlidingWindow: BGE base (iterative dense retrieval)
         class _DenseRetriever:
             def __init__(self, _embs, _chunks, _model):
                 self._e = _embs; self._c = _chunks; self._m = _model
@@ -183,8 +193,8 @@ def build_index(all_chunks, embed_model):
                 s  = self._e @ qe
                 return [self._c[i]["id"] for i in np.argsort(-s)[:k]]
         dense_ret = _DenseRetriever(embs, chunks, embed_model)
-        repocoder_bge = RepoCoderStyle(base_retriever=dense_ret)
-        repocoder_bge._chunks_by_id = {c["id"]: c["text"] for c in chunks}
+        bm25sw_bge = BM25SlidingWindow(base_retriever=dense_ret)
+        bm25sw_bge._chunks_by_id = {c["id"]: c["text"] for c in chunks}
 
         # Git volatility
         git_az = GitVolatilityAnalyzer()
@@ -215,8 +225,8 @@ def build_index(all_chunks, embed_model):
         index[rid] = {
             "chunks": chunks, "embs": embs,
             "bm25": bm25,
-            "repocoder_bm25": repocoder_bm25,
-            "repocoder_bge":  repocoder_bge,
+            "bm25sw_bm25": bm25sw_bm25,
+            "bm25sw_bge":  bm25sw_bge,
             "git_az": git_az,
             "hybrid_scorer": hybrid_scorer,
             "pagerank": pagerank,
@@ -238,17 +248,19 @@ def run_bm25(index, queries, k=10):
 
 
 def run_repocoder_bm25(index, queries, k=10):
+    """BM25-SlidingWindow (BM25 base): NOT RepoCoder — see baselines.py for distinction."""
     preds = []
     for qid, query, gt, intent, rid, _ in queries:
         if rid not in index or not gt: continue
-        retrieved = index[rid]["repocoder_bm25"].retrieve_ids(query, k)
+        retrieved = index[rid]["bm25sw_bm25"].retrieve_ids(query, k)
         preds.append({"query_id": qid, "retrieved": retrieved,
                       "ground_truth": gt, "intent": intent})
     return preds
 
 
 def run_repocoder_bge(index, queries, embed_model, k=10):
-    """RepoCoder with BGE: dense round-1, augment query with top snippet, dense round-2."""
+    """BM25-SlidingWindow (BGE base): dense round-1, augment query with top snippet, dense round-2.
+    NOT RepoCoder — see baselines.py for distinction."""
     preds = []
     for qid, query, gt, intent, rid, _ in queries:
         if rid not in index or not gt: continue
@@ -522,7 +534,7 @@ def main():
 
     print("\n[3/4] Building embeddings and indices...")
     embed_model = SentenceTransformer("BAAI/bge-small-en-v1.5",
-                                      cache_folder="/tmp/hf_cache",
+                                      cache_folder=os.environ.get("HF_HOME", os.path.join(os.path.expanduser("~"), ".cache", "huggingface")),
                                       device="cpu")
     index = build_index(all_chunks, embed_model)
 
@@ -531,20 +543,20 @@ def main():
     t0 = time.time()
 
     bm25_p         = run_bm25(index, queries_gt, k)
-    repocoder_bm25 = run_repocoder_bm25(index, queries_gt, k)
-    repocoder_bge  = run_repocoder_bge(index, queries_gt, embed_model, k)
+    bm25sw_bm25_p  = run_repocoder_bm25(index, queries_gt, k)
+    bm25sw_bge_p   = run_repocoder_bge(index, queries_gt, embed_model, k)
     vanilla_p      = run_vanilla_rag(index, queries_gt, embed_model, k)
     cg_n3n4_p      = run_chatgit_n3n4(index, queries_gt, embed_model, sessions, k)
     cg_full_p      = run_chatgit_full(index, queries_gt, embed_model, sessions, k)
     print(f"  Done in {time.time()-t0:.1f}s")
 
     systems = {
-        "BM25":                  bm25_p,
-        "RepoCoder (BM25)":      repocoder_bm25,
-        "RepoCoder (BGE)":       repocoder_bge,
-        "VanillaRAG (BGE)":      vanilla_p,
-        "ChatGIT (Session+Intent)": cg_n3n4_p,
-        "ChatGIT (Full)":        cg_full_p,
+        "BM25":                      bm25_p,
+        "BM25-SlidingWindow (BM25)": bm25sw_bm25_p,
+        "BM25-SlidingWindow (BGE)":  bm25sw_bge_p,
+        "VanillaRAG (BGE)":          vanilla_p,
+        "ChatGIT (Session+Intent)":  cg_n3n4_p,
+        "ChatGIT (Full)":            cg_full_p,
     }
 
     # ── Evaluate ──────────────────────────────────────────────────────────────
@@ -581,7 +593,7 @@ def main():
 
     # ── Per-repo MRR ──────────────────────────────────────────────────────────
     print(f"\n  PER-REPOSITORY MRR")
-    key_systems = ["BM25", "RepoCoder (BGE)", "VanillaRAG (BGE)",
+    key_systems = ["BM25", "BM25-SlidingWindow (BGE)", "VanillaRAG (BGE)",
                    "ChatGIT (Full)"]
     header = f"  {'Repo':<14}" + "".join(f"{s[:14]:>16}" for s in key_systems)
     print(header)
@@ -607,11 +619,11 @@ def main():
     cg_map  = {p["query_id"]: p for p in cg_full_p}
     reports = []
     for name, preds in [
-        ("BM25",             bm25_p),
-        ("RepoCoder (BM25)", repocoder_bm25),
-        ("RepoCoder (BGE)",  repocoder_bge),
-        ("VanillaRAG (BGE)", vanilla_p),
-        ("ChatGIT (Session+Intent)", cg_n3n4_p),
+        ("BM25",                      bm25_p),
+        ("BM25-SlidingWindow (BM25)", bm25sw_bm25_p),
+        ("BM25-SlidingWindow (BGE)",  bm25sw_bge_p),
+        ("VanillaRAG (BGE)",          vanilla_p),
+        ("ChatGIT (Session+Intent)",  cg_n3n4_p),
     ]:
         oth_map = {p["query_id"]: p for p in preds}
         common  = sorted(set(cg_map) & set(oth_map))

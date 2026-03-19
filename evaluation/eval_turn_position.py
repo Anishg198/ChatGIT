@@ -10,7 +10,9 @@ had at least one hit in @5).
 """
 
 import sys, os, json, time
-sys.path.insert(0, '/Users/anishgupta/Desktop/ChatGIT')
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
 import chatgit.core.chunker as _ck
 _ck._count_tokens = lambda text: len(text) // 4
@@ -25,14 +27,19 @@ from chatgit.core.session_memory import SessionRetrievalMemory
 from evaluation.baselines import BM25
 from evaluation.eval_retrieval import evaluate_retrieval
 
+_REPO_BASE = os.environ.get("CHATGIT_REPO_BASE", "/tmp")
 REPOS = {
-    "flask":    "/tmp/flask_bench",
-    "requests": "/tmp/requests_bench",
-    "click":    "/tmp/click_bench",
-    "fastapi":  "/tmp/fastapi_bench",
-    "celery":   "/tmp/celery_bench",
+    "flask":    os.environ.get("CHATGIT_REPO_FLASK",    os.path.join(_REPO_BASE, "flask_bench")),
+    "requests": os.environ.get("CHATGIT_REPO_REQUESTS", os.path.join(_REPO_BASE, "requests_bench")),
+    "click":    os.environ.get("CHATGIT_REPO_CLICK",    os.path.join(_REPO_BASE, "click_bench")),
+    "fastapi":  os.environ.get("CHATGIT_REPO_FASTAPI",  os.path.join(_REPO_BASE, "fastapi_bench")),
+    "celery":   os.environ.get("CHATGIT_REPO_CELERY",   os.path.join(_REPO_BASE, "celery_bench")),
 }
-CONVERSATIONS_PATH = "data/convcodebench/eval_conversations.jsonl"
+REPOS = {k: v for k, v in REPOS.items() if os.path.isdir(v)}
+CONVERSATIONS_PATH = os.environ.get(
+    "CHATGIT_CONVS_PATH",
+    os.path.join(_project_root, "data", "convcodebench", "eval_conversations.jsonl")
+)
 SKIP_DIRS = {"tests", "test", "docs", "doc", "examples", "example",
              "__pycache__", ".git", "build", "dist"}
 
@@ -93,7 +100,7 @@ def main():
     print("=" * 70)
 
     embed_model = SentenceTransformer("BAAI/bge-small-en-v1.5",
-                                      cache_folder="/tmp/hf_cache")
+                                      cache_folder=os.environ.get("HF_HOME", os.path.join(os.path.expanduser("~"), ".cache", "huggingface")))
 
     # Load and index repos
     print("\n[1/3] Indexing repositories...")

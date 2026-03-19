@@ -134,8 +134,11 @@ def _dummy_retriever_preds(
             gt = turn.get("ground_truth_chunks", [])
             # Simulate: first chunk correct with probability based on hash
             h = int(hashlib.md5(f"{system_name}{conv_id}{ti}".encode()).hexdigest(), 16)
-            hit_prob = {"ChatGIT": 0.7, "BM25": 0.35, "VanillaRAG": 0.50,
-                        "RepoCoder": 0.45, "GraphRAG-Code": 0.55}.get(system_name, 0.4)
+            hit_prob = {
+            "ChatGIT": 0.70, "BM25": 0.35, "VanillaRAG": 0.50,
+            "ConvAwareRAG": 0.52, "BM25-SlidingWindow": 0.40,
+            "GraphRAG-Code": 0.55,
+        }.get(system_name, 0.4)
             retrieved = []
             if gt and (h % 100) / 100 < hit_prob:
                 retrieved = gt[:1] + [f"filler_{i}" for i in range(k - 1)]
@@ -243,12 +246,13 @@ def generate_latex_results_table(
         best_vals[m] = max(vals) if vals else 0
 
     SYSTEM_GROUPS = {
-        "BM25": "Lexical",
-        "TF-IDF": "Lexical",
-        "VanillaRAG": "Dense",
-        "RepoCoder": "Iterative",
-        "GraphRAG-Code": "Graph",
-        "ChatGIT": "Ours",
+        "BM25":               "Lexical",
+        "TF-IDF":             "Lexical",
+        "BM25-SlidingWindow": "Lexical",
+        "VanillaRAG":         "Dense",
+        "ConvAwareRAG":       "Dense",
+        "GraphRAG-Code":      "Graph",
+        "ChatGIT":            "Ours",
     }
 
     prev_group = None
@@ -308,7 +312,7 @@ def run_full_benchmark(
 
     conversations = load_convcodebench(dataset_path)
 
-    SYSTEMS = ["ChatGIT", "BM25", "VanillaRAG", "RepoCoder", "GraphRAG-Code"]
+    SYSTEMS = ["BM25", "VanillaRAG", "ConvAwareRAG", "BM25-SlidingWindow", "GraphRAG-Code", "ChatGIT"]
 
     # ---------- Retrieval ----------
     print("\n[1/5] Retrieval Evaluation")
@@ -348,8 +352,37 @@ def run_full_benchmark(
     print_comparison_table(comparison_reports)
 
     # ---------- Generation ----------
-    print("\n[3/5] Generation Quality (skipped — requires live LLM)")
+    print("\n[3/5] Generation Quality")
     all_gen_results = {}
+    if not use_dummy_preds:
+        # Live evaluation: conversations must have reference_answer fields populated
+        # and context_snippets fields containing retrieved chunk texts.
+        # Pass a generation function that calls the live ChatGIT /api/chat endpoint.
+        print("  NOTE: Generation evaluation requires live LLM. "
+              "Populate 'reference_answer' fields in the dataset and "
+              "pass a system_fn to conversations_to_gen_preds().")
+        print("  Skipping generation eval in this run — run evaluation/eval_generation.py "
+              "directly with live Groq API to get CodeBLEU, ROUGE-L, BERTScore numbers.")
+    else:
+        # Dummy generation predictions for pipeline testing
+        import hashlib
+        dummy_gen_preds = []
+        for conv in conversations:
+            conv_id = conv.get("conversation_id", "c0")
+            for ti, turn in enumerate(conv.get("turns", [])):
+                ref = turn.get("reference_answer", "placeholder reference answer")
+                h   = int(hashlib.md5(f"gen{conv_id}{ti}".encode()).hexdigest(), 16) % 100
+                # Simulate varying quality
+                hyp = ref[:int(len(ref) * 0.7)] if h > 30 else "unrelated response"
+                dummy_gen_preds.append({
+                    "query_id":   f"{conv_id}_t{ti}",
+                    "hypothesis": hyp,
+                    "reference":  ref,
+                    "intent":     turn.get("intent", "unknown"),
+                })
+        gen_result = evaluate_generation(dummy_gen_preds, n_bootstrap=1000)
+        all_gen_results["ChatGIT"] = gen_result
+        print_generation_report(gen_result, title="ChatGIT (dummy — pipeline test only)")
 
     # ---------- Conversation quality ----------
     print("\n[4/5] Conversation Quality")

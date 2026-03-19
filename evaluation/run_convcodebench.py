@@ -4,7 +4,10 @@ Uses simple token counter to avoid tiktoken subprocess hangs.
 """
 
 import sys, json, os, time
-sys.path.insert(0, '/Users/anishgupta/Desktop/ChatGIT')
+# Ensure project root is on the path when running as a script
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
 # ── Patch tiktoken BEFORE importing chunker ───────────────────────────────────
 import chatgit.core.chunker as _ck
@@ -25,15 +28,27 @@ from evaluation.baselines import BM25, TFIDFRetriever, RepoCoderStyle
 from evaluation.eval_retrieval import evaluate_retrieval, print_retrieval_report
 from evaluation.statistical_tests import full_comparison_report, print_comparison_table
 
-REPOS = {
-    "flask":    "/tmp/flask_bench",
-    "requests": "/tmp/requests_bench",
-    "click":    "/tmp/click_bench",
-    "fastapi":  "/tmp/fastapi_bench",
-    "celery":   "/tmp/celery_bench",
-}
+# ── Repository paths ─────────────────────────────────────────────────────────
+# Override individual repos via environment variables, e.g.:
+#   CHATGIT_REPO_FLASK=/path/to/flask python -m evaluation.run_convcodebench
+# Or set CHATGIT_REPO_BASE to use a shared parent directory.
+_REPO_BASE = os.environ.get("CHATGIT_REPO_BASE", "/tmp")
 
-CONVERSATIONS_PATH = "data/convcodebench/sample_conversations.jsonl"
+REPOS = {
+    "flask":    os.environ.get("CHATGIT_REPO_FLASK",    os.path.join(_REPO_BASE, "flask_bench")),
+    "requests": os.environ.get("CHATGIT_REPO_REQUESTS", os.path.join(_REPO_BASE, "requests_bench")),
+    "click":    os.environ.get("CHATGIT_REPO_CLICK",    os.path.join(_REPO_BASE, "click_bench")),
+    "fastapi":  os.environ.get("CHATGIT_REPO_FASTAPI",  os.path.join(_REPO_BASE, "fastapi_bench")),
+    "celery":   os.environ.get("CHATGIT_REPO_CELERY",   os.path.join(_REPO_BASE, "celery_bench")),
+}
+# Filter out repos whose path does not exist (skip silently, warn)
+REPOS = {k: v for k, v in REPOS.items() if os.path.isdir(v) or
+         print(f"  [SKIP] {k}: path not found ({v})", file=sys.stderr) or False}
+
+CONVERSATIONS_PATH = os.environ.get(
+    "CHATGIT_CONVS_PATH",
+    os.path.join(_project_root, "data", "convcodebench", "sample_conversations.jsonl")
+)
 
 
 # ── Chunk all repos ───────────────────────────────────────────────────────────
@@ -290,16 +305,56 @@ def run_chatgit(retrievers, queries, embed_model, k=10):
     return preds
 
 
-def run_chatgit_config(retrievers, queries, embed_model, k=10,
-                       use_n1=True, use_n2=True, use_n5=True):
+def run_conv_aware_rag(retrievers, queries, embed_model, k=10):
     """
-    Parametric ChatGIT runner — N3 and N4 always active; toggle N1/N2/N5.
+    ConvAwareRAG baseline: VanillaRAG + previous query appended to current query.
+
+    This is the simplest multi-turn dense baseline. It answers: how much of
+    ChatGIT's multi-turn gain comes from just remembering the last question?
+    Used to isolate N3 (session memory) contribution vs. naive concatenation.
+    """
+    by_conv = defaultdict(list)
+    for row in queries:
+        by_conv[row[5]].append(row)
+
+    preds = []
+    for conv_id, conv_rows in by_conv.items():
+        repo_id = conv_rows[0][4]
+        if repo_id not in retrievers:
+            continue
+        rv     = retrievers[repo_id]
+        chunks = rv["chunks"]
+        embs   = rv["embs"]
+        prev_query = ""
+
+        for qid, query, gt, intent, _, _ in conv_rows:
+            if not gt:
+                continue
+            augmented = f"{query} {prev_query}".strip() if prev_query else query
+            q_emb = embed_model.encode([augmented], normalize_embeddings=True)[0].astype(np.float32)
+            sims  = embs @ q_emb
+            top   = np.argsort(-sims)[:k]
+            retrieved = [chunks[i]["id"] for i in top]
+            preds.append({"query_id": qid, "retrieved": retrieved,
+                          "ground_truth": gt, "intent": intent})
+            prev_query = query
+    return preds
+
+
+def run_chatgit_config(retrievers, queries, embed_model, k=10,
+                       use_n1=True, use_n2=True, use_n3=True,
+                       use_n4=True, use_n5=True):
+    """
+    Parametric ChatGIT runner — toggle any combination of N1-N5.
 
     N1 – git volatility weight (file-level retrieval weight from commit history)
     N2 – hybrid PageRank + query-conditioned graph attention rescoring
-    N3 – session memory: redundancy penalty + session zone bonus  [always on]
-    N4 – intent-driven granularity boost + dynamic top_k          [always on]
+    N3 – session memory: redundancy penalty + session zone bonus
+    N4 – intent-driven granularity boost + dynamic top_k
     N5 – call-graph bidirectional neighbourhood boost
+
+    Setting all flags True = full ChatGIT system.
+    Setting all flags False = VanillaRAG equivalent.
     """
     by_conv = defaultdict(list)
     for row in queries:
@@ -322,23 +377,31 @@ def run_chatgit_config(retrievers, queries, embed_model, k=10,
             if not gt:
                 continue
 
-            # N4: intent classification → dynamic retrieval config
-            cfg = classify_intent(query)
-            # N3: coreference resolution
-            resolved = session_mem.resolve_coreferences(query)
+            # N4: intent classification → dynamic retrieval config (if active)
+            cfg      = classify_intent(query) if use_n4 else classify_intent.__class__  # fallback below
+            if not use_n4:
+                from chatgit.core.intent_classifier import RetrievalConfig
+                cfg = RetrievalConfig(
+                    top_k=20, rerank_n=8, max_per_file=3,
+                    token_budget=6000, granularity="function",
+                    granularity_boost=1.0, include_neighborhood=False,
+                )
+            # N3: coreference resolution (if active)
+            resolved = session_mem.resolve_coreferences(query) if use_n3 else query
 
             q_emb = embed_model.encode([resolved], normalize_embeddings=True)[0].astype(np.float32)
-            sims  = (embs @ q_emb).copy()   # copy so we can mutate
+            sims  = (embs @ q_emb).copy()
 
-            # N4: granularity boost on similarity scores
-            for i, c in enumerate(chunks):
-                nt = c["node_type"]
-                if nt == "module_summary" and cfg.granularity == "module":
-                    sims[i] *= cfg.granularity_boost
-                elif nt == "function" and cfg.granularity == "function":
-                    sims[i] *= 1.15
-                elif nt == "class" and intent == "explain":
-                    sims[i] *= 1.10
+            # N4: granularity boost on similarity scores (only if N4 active)
+            if use_n4:
+                for i, c in enumerate(chunks):
+                    nt = c["node_type"]
+                    if nt == "module_summary" and cfg.granularity == "module":
+                        sims[i] *= cfg.granularity_boost
+                    elif nt == "function" and cfg.granularity == "function":
+                        sims[i] *= 1.15
+                    elif nt == "class" and intent == "explain":
+                        sims[i] *= 1.10
 
             # N2: hybrid PageRank + query-conditioned graph attention
             hybrid_scores = {}
@@ -408,12 +471,13 @@ def run_chatgit_config(retrievers, queries, embed_model, k=10,
                 if use_n5:
                     score += neighbour_boost.get(rid, 0.0)
 
-                # N3: session memory scoring
-                if rid in session_mem._retrieved:
-                    score *= session_mem.REDUNDANCY_PENALTY_LAST_TURN
-                if fname in session_mem._active_files:
-                    score *= (1.0 + session_mem.SESSION_ZONE_BONUS
-                              * session_mem._active_files[fname])
+                # N3: session memory scoring (only if N3 active)
+                if use_n3:
+                    if rid in session_mem._retrieved:
+                        score *= session_mem.REDUNDANCY_PENALTY_LAST_TURN
+                    if fname in session_mem._active_files:
+                        score *= (1.0 + session_mem.SESSION_ZONE_BONUS
+                                  * session_mem._active_files[fname])
 
                 scored.append((rid, score))
 
@@ -469,44 +533,74 @@ def main():
     print(f"  Intent dist: {dict(sorted(ic.items()))}")
 
     print("\n[3/4] Building retrievers + embeddings (BGE-small)...")
+    _hf_cache = os.environ.get("HF_HOME",
+                               os.path.join(os.path.expanduser("~"), ".cache", "huggingface"))
     embed_model = SentenceTransformer("BAAI/bge-small-en-v1.5",
-                                       cache_folder="/tmp/hf_cache")
+                                       cache_folder=_hf_cache)
     retrievers = build_retrievers(all_chunks, embed_model)
 
     print("\n[4/4] Running retrieval systems...")
     k = 10
     t0 = time.time()
 
-    # Baselines
-    bm25_preds    = run_lexical("bm25",       retrievers, queries_gt, k)
-    bm25t_preds   = run_lexical("bm25_tuned", retrievers, queries_gt, k)
-    vanilla_preds = run_dense(retrievers, queries_gt, embed_model, k)
+    # ── Baselines ─────────────────────────────────────────────────────────────
+    bm25_preds      = run_lexical("bm25",       retrievers, queries_gt, k)
+    bm25t_preds     = run_lexical("bm25_tuned", retrievers, queries_gt, k)
+    vanilla_preds   = run_dense(retrievers, queries_gt, embed_model, k)
+    conv_aware_preds = run_conv_aware_rag(retrievers, queries_gt, embed_model, k)
 
-    # N3+N4 only (already confirmed system)
-    chatgit_n3n4_preds = run_chatgit(retrievers, queries_gt, embed_model, k)
+    # ── Incremental ablation: build up from Vanilla ────────────────────────
+    # N3 only — session memory alone, no intent routing
+    chatgit_n3only_preds = run_chatgit_config(
+        retrievers, queries_gt, embed_model, k,
+        use_n1=False, use_n2=False, use_n3=True, use_n4=False, use_n5=False)
 
-    # Ablations: add each new novelty one at a time on top of N3+N4
-    chatgit_n1_preds   = run_chatgit_config(retrievers, queries_gt, embed_model, k,
-                                            use_n1=True,  use_n2=False, use_n5=False)
-    chatgit_n2_preds   = run_chatgit_config(retrievers, queries_gt, embed_model, k,
-                                            use_n1=False, use_n2=True,  use_n5=False)
-    chatgit_n5_preds   = run_chatgit_config(retrievers, queries_gt, embed_model, k,
-                                            use_n1=False, use_n2=False, use_n5=True)
+    # N4 only — intent routing alone, no session memory
+    chatgit_n4only_preds = run_chatgit_config(
+        retrievers, queries_gt, embed_model, k,
+        use_n1=False, use_n2=False, use_n3=False, use_n4=True, use_n5=False)
 
-    # Full system: all 5 novelties
-    chatgit_full_preds = run_chatgit_config(retrievers, queries_gt, embed_model, k,
-                                            use_n1=True,  use_n2=True,  use_n5=True)
+    # N3+N4 — the confirmed conversational base
+    chatgit_n3n4_preds = run_chatgit_config(
+        retrievers, queries_gt, embed_model, k,
+        use_n1=False, use_n2=False, use_n3=True, use_n4=True, use_n5=False)
+
+    # N3+N4+N1 — add git volatility
+    chatgit_n1_preds = run_chatgit_config(
+        retrievers, queries_gt, embed_model, k,
+        use_n1=True, use_n2=False, use_n3=True, use_n4=True, use_n5=False)
+
+    # N3+N4+N2 — add hybrid PageRank
+    chatgit_n2_preds = run_chatgit_config(
+        retrievers, queries_gt, embed_model, k,
+        use_n1=False, use_n2=True, use_n3=True, use_n4=True, use_n5=False)
+
+    # N3+N4+N5 — add call-context neighbourhood (biggest single gain)
+    chatgit_n5_preds = run_chatgit_config(
+        retrievers, queries_gt, embed_model, k,
+        use_n1=False, use_n2=False, use_n3=True, use_n4=True, use_n5=True)
+
+    # Full system — all 5 novelties
+    chatgit_full_preds = run_chatgit_config(
+        retrievers, queries_gt, embed_model, k,
+        use_n1=True, use_n2=True, use_n3=True, use_n4=True, use_n5=True)
+
     print(f"  All systems done in {time.time()-t0:.1f}s")
 
     systems = {
+        # Baselines (ordered weakest → strongest)
         "BM25":                          bm25_preds,
-        "BM25-Tuned(RepoCoder proxy)":   bm25t_preds,
+        "BM25-SlidingWindow":            bm25t_preds,
         "VanillaRAG(BGE)":               vanilla_preds,
+        "ConvAwareRAG":                  conv_aware_preds,
+        # Ablation: incremental build-up
+        "ChatGIT(N3 only)":              chatgit_n3only_preds,
+        "ChatGIT(N4 only)":              chatgit_n4only_preds,
         "ChatGIT(N3+N4)":                chatgit_n3n4_preds,
         "ChatGIT(N3+N4+N1)":             chatgit_n1_preds,
         "ChatGIT(N3+N4+N2)":             chatgit_n2_preds,
         "ChatGIT(N3+N4+N5)":             chatgit_n5_preds,
-        "ChatGIT(All5-N1+N2+N3+N4+N5)": chatgit_full_preds,
+        "ChatGIT(All5)":                 chatgit_full_preds,
     }
 
     # ── Evaluate ──────────────────────────────────────────────────────────────
@@ -562,7 +656,7 @@ def main():
                          if c in p["ground_truth"]), 0.0)
             per_repo[repo][name].append(mrr)
     for repo in sorted(per_repo):
-        cg = np.mean(per_repo[repo].get("ChatGIT(All5-N1+N2+N3+N4+N5)", [0]))
+        cg = np.mean(per_repo[repo].get("ChatGIT(All5)", [0]))
         bm = np.mean(per_repo[repo].get("BM25", [0]))
         vr = np.mean(per_repo[repo].get("VanillaRAG(BGE)", [0]))
         print(f"  {repo:<14}  {cg:>10.4f}  {bm:>8.4f}  {vr:>12.4f}  {cg-bm:>+12.4f}")
@@ -575,9 +669,9 @@ def main():
 
     # ── Statistical significance ───────────────────────────────────────────────
     print(f"\n  STATISTICAL SIGNIFICANCE (ChatGIT vs baselines, n={len(queries_gt)})")
-    cg_q   = {p["query_id"]: p for p in results["ChatGIT(All5-N1+N2+N3+N4+N5)"]["per_query"]}
+    cg_q   = {p["query_id"]: p for p in results["ChatGIT(All5)"]["per_query"]}
     reports = []
-    for name in ["BM25", "BM25-Tuned(RepoCoder proxy)", "VanillaRAG(BGE)", "ChatGIT(N3+N4)"]:
+    for name in ["BM25", "BM25-SlidingWindow", "VanillaRAG(BGE)", "ConvAwareRAG", "ChatGIT(N3+N4)"]:
         oth_q = {p["query_id"]: p for p in results[name]["per_query"]}
         common = sorted(set(cg_q) & set(oth_q))
         if len(common) < 2:
@@ -603,6 +697,19 @@ def main():
             for intent in intents}
         save[name]["redundancy_rate"] = redundancy_rate(
             systems[name], sessions)
+    save["_meta"] = {
+        "n_conversations": len(sessions),
+        "n_queries_with_gt": len(queries_gt),
+        "repos": list(REPOS.keys()),
+        "k": k,
+        "note": (
+            "Incremental ablation: Vanilla → N3-only → N4-only → N3+N4 "
+            "→ +N1 → +N2 → +N5 → Full. "
+            "BM25-SlidingWindow is a BM25+query-augmentation baseline "
+            "(NOT RepoCoder). "
+            "ConvAwareRAG is VanillaRAG+previous query appended."
+        ),
+    }
     with open("results/convcodebench_results.json", "w") as f:
         json.dump(save, f, indent=2)
     print("\n  Saved → results/convcodebench_results.json")

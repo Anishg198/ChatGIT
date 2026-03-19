@@ -67,53 +67,108 @@ class AblationConfig:
 # ---------------------------------------------------------------------------
 
 ABLATION_CONFIGS: List[AblationConfig] = [
+    # ── Incremental build-up (bottom-up ablation) ──────────────────────────────
+    # Row 1: Vanilla baseline — all novelties off, same as VanillaRAG
+    AblationConfig(
+        name="Vanilla",
+        description="All novelties disabled — VanillaRAG equivalent",
+        use_volatility=False, use_hybrid_importance=False,
+        use_session_memory=False, use_intent_routing=False,
+        use_neighborhood=False,
+    ),
+    # Row 2: N3 alone — session memory only, fixed retrieval parameters
+    AblationConfig(
+        name="N3 only",
+        description="Session-aware retrieval memory only; no intent routing, no graph signals",
+        use_volatility=False, use_hybrid_importance=False,
+        use_session_memory=True, use_intent_routing=False,
+        use_neighborhood=False,
+    ),
+    # Row 3: N4 alone — intent routing only, no session memory
+    AblationConfig(
+        name="N4 only",
+        description="Intent-adaptive granularity routing only; no session memory, no graph signals",
+        use_volatility=False, use_hybrid_importance=False,
+        use_session_memory=False, use_intent_routing=True,
+        use_neighborhood=False,
+    ),
+    # Row 4: N3+N4 together — the confirmed session+intent base
+    AblationConfig(
+        name="N3+N4",
+        description="Session memory + intent routing — the conversational base system",
+        use_volatility=False, use_hybrid_importance=False,
+        use_session_memory=True, use_intent_routing=True,
+        use_neighborhood=False,
+    ),
+    # Row 5: Add N1 on top of N3+N4
+    AblationConfig(
+        name="N3+N4+N1",
+        description="Add git-history volatility weighting over N3+N4 base",
+        use_volatility=True, use_hybrid_importance=False,
+        use_session_memory=True, use_intent_routing=True,
+        use_neighborhood=False,
+    ),
+    # Row 6: Add N2 on top of N3+N4
+    AblationConfig(
+        name="N3+N4+N2",
+        description="Add hybrid PageRank+QC-attention over N3+N4 base",
+        use_volatility=False, use_hybrid_importance=True,
+        use_session_memory=True, use_intent_routing=True,
+        use_neighborhood=False,
+    ),
+    # Row 7: Add N5 on top of N3+N4 — the biggest single gain
+    AblationConfig(
+        name="N3+N4+N5",
+        description="Add bidirectional call-context neighbourhood over N3+N4 base",
+        use_volatility=False, use_hybrid_importance=False,
+        use_session_memory=True, use_intent_routing=True,
+        use_neighborhood=True,
+    ),
+    # Row 8: Full system — all novelties active
     AblationConfig(
         name="Full",
-        description="All novelties active — ChatGIT full system",
+        description="All novelties active — ChatGIT full system (N1+N2+N3+N4+N5)",
         use_volatility=True, use_hybrid_importance=True,
         use_session_memory=True, use_intent_routing=True,
         use_neighborhood=True,
     ),
+]
+
+# Convenience: original subtract-one configs kept for backward compatibility
+SUBTRACT_ONE_CONFIGS: List[AblationConfig] = [
     AblationConfig(
-        name="-N1 (no volatility)",
-        description="Remove Git-history volatility weighting",
+        name="-N1",
+        description="Full system minus git-history volatility weighting",
         use_volatility=False, use_hybrid_importance=True,
         use_session_memory=True, use_intent_routing=True,
         use_neighborhood=True,
     ),
     AblationConfig(
-        name="-N2 (no QC-attention)",
-        description="Replace hybrid scorer with pure PageRank",
+        name="-N2",
+        description="Full system minus hybrid PageRank+QC-attention",
         use_volatility=True, use_hybrid_importance=False,
         use_session_memory=True, use_intent_routing=True,
         use_neighborhood=True,
     ),
     AblationConfig(
-        name="-N3 (no session memory)",
-        description="Remove session-aware retrieval memory",
+        name="-N3",
+        description="Full system minus session-aware retrieval memory",
         use_volatility=True, use_hybrid_importance=True,
         use_session_memory=False, use_intent_routing=True,
         use_neighborhood=True,
     ),
     AblationConfig(
-        name="-N4 (no intent routing)",
-        description="Use fixed retrieval parameters (no intent classification)",
+        name="-N4",
+        description="Full system minus intent-adaptive granularity routing",
         use_volatility=True, use_hybrid_importance=True,
         use_session_memory=True, use_intent_routing=False,
         use_neighborhood=True,
     ),
     AblationConfig(
-        name="-N5 (no neighborhood)",
-        description="Remove bidirectional call-context neighbourhood",
+        name="-N5",
+        description="Full system minus bidirectional call-context neighbourhood",
         use_volatility=True, use_hybrid_importance=True,
         use_session_memory=True, use_intent_routing=True,
-        use_neighborhood=False,
-    ),
-    AblationConfig(
-        name="Vanilla (no novelties)",
-        description="All novelties disabled — VanillaRAG equivalent",
-        use_volatility=False, use_hybrid_importance=False,
-        use_session_memory=False, use_intent_routing=False,
         use_neighborhood=False,
     ),
 ]

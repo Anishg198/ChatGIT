@@ -3,8 +3,10 @@ Real benchmark test using Flask repo + ConvCodeBench sample conversations.
 Runs BM25, TF-IDF, VanillaRAG, and ChatGIT (no-LLM retrieval only) baselines.
 """
 
-import sys, json, time
-sys.path.insert(0, '/Users/anishgupta/Desktop/ChatGIT')
+import sys, json, time, os
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
 import numpy as np
 from collections import defaultdict
@@ -17,8 +19,13 @@ from evaluation.baselines import BM25, TFIDFRetriever, VanillaRAG, RepoCoderStyl
 from evaluation.eval_retrieval import evaluate_retrieval, print_retrieval_report
 from evaluation.statistical_tests import full_comparison_report, print_comparison_table
 
-FLASK_REPO = "/tmp/flask_bench"
-CONVERSATIONS_PATH = "data/convcodebench/sample_conversations.jsonl"
+FLASK_REPO = os.environ.get("CHATGIT_REPO_FLASK",
+                            os.path.join(os.environ.get("CHATGIT_REPO_BASE", "/tmp"), "flask_bench"))
+CONVERSATIONS_PATH = os.environ.get(
+    "CHATGIT_CONVS_PATH",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                 "data", "convcodebench", "sample_conversations.jsonl")
+)
 
 # ── Ground truth re-mapped to actual chunker node_names ──────────────────────
 # (verified from actual chunker output above)
@@ -126,7 +133,8 @@ def make_chatgit_preds(docs, queries, k=10):
     - N3: session memory redundancy suppression
     """
     from sentence_transformers import SentenceTransformer
-    embed_model = SentenceTransformer('BAAI/bge-small-en-v1.5', cache_folder='/tmp/hf_cache')
+    _hf_cache = os.environ.get("HF_HOME", os.path.join(os.path.expanduser("~"), ".cache", "huggingface"))
+    embed_model = SentenceTransformer('BAAI/bge-small-en-v1.5', cache_folder=_hf_cache)
 
     print("[Test] Building ChatGIT embeddings (BGE)...")
     t0 = time.time()
@@ -239,8 +247,8 @@ def main():
     print("[Test] Fitting TF-IDF...")
     tfidf = TFIDFRetriever().fit(flask_chunks)
 
-    print("[Test] Fitting RepoCoder...")
-    repocoder = RepoCoderStyle(base_retriever=TFIDFRetriever()).fit(flask_chunks)
+    print("[Test] Fitting BM25-SlidingWindow (NOT RepoCoder — see baselines.py)...")
+    bm25sw = RepoCoderStyle(base_retriever=TFIDFRetriever()).fit(flask_chunks)
 
     # ── Run retrievals ─────────────────────────────────────────────────────
     k = 10
@@ -252,8 +260,8 @@ def main():
     print("[Test] Running TF-IDF (VanillaRAG proxy)...")
     systems["TF-IDF/VanillaRAG"] = make_retrieval_preds(tfidf, queries, chunk_by_id, k=k)
 
-    print("[Test] Running RepoCoder...")
-    systems["RepoCoder"] = make_retrieval_preds(repocoder, queries, chunk_by_id, k=k)
+    print("[Test] Running BM25-SlidingWindow...")
+    systems["BM25-SlidingWindow"] = make_retrieval_preds(bm25sw, queries, chunk_by_id, k=k)
 
     print("[Test] Running ChatGIT (BGE + N3 + N4)...")
     chatgit_preds = make_chatgit_preds(flask_chunks, queries, k=k)
@@ -310,7 +318,7 @@ def main():
     print("  " + "-" * 70)
     chatgit_per_q = {r["query_id"]: r for r in results["ChatGIT"]["per_query"]}
     reports = []
-    for name in ["BM25", "TF-IDF/VanillaRAG", "RepoCoder"]:
+    for name in ["BM25", "TF-IDF/VanillaRAG", "BM25-SlidingWindow"]:
         other_per_q = {r["query_id"]: r for r in results[name]["per_query"]}
         common = sorted(set(chatgit_per_q) & set(other_per_q))
         for metric in ["mrr", "recall@5"]:

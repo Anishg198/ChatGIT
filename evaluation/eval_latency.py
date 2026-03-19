@@ -12,7 +12,9 @@ Repos tested: flask (small), requests (medium), fastapi (large)
 
 import sys, time, os, json
 import numpy as np
-sys.path.insert(0, '/Users/anishgupta/Desktop/ChatGIT')
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
 import chatgit.core.chunker as _ck
 _ck._count_tokens = lambda text: len(text) // 4
@@ -23,11 +25,16 @@ from chatgit.core.session_memory import SessionRetrievalMemory
 from evaluation.baselines import BM25
 from sentence_transformers import SentenceTransformer
 
-REPOS = {
-    "flask":    ("/tmp/flask_bench",    "small"),
-    "requests": ("/tmp/requests_bench", "medium"),
-    "fastapi":  ("/tmp/fastapi_bench",  "large"),
+_REPO_BASE = os.environ.get("CHATGIT_REPO_BASE", "/tmp")
+_repo_paths = {
+    "flask":    os.environ.get("CHATGIT_REPO_FLASK",   os.path.join(_REPO_BASE, "flask_bench")),
+    "requests": os.environ.get("CHATGIT_REPO_REQUESTS",os.path.join(_REPO_BASE, "requests_bench")),
+    "fastapi":  os.environ.get("CHATGIT_REPO_FASTAPI", os.path.join(_REPO_BASE, "fastapi_bench")),
 }
+REPOS = {k: (v, sz) for (k, sz), v in zip(
+    [("flask","small"), ("requests","medium"), ("fastapi","large")],
+    _repo_paths.values()
+) if os.path.isdir(v)}
 
 SKIP_DIRS = {"tests", "test", "docs", "doc", "examples", "example",
              "__pycache__", ".git", "build", "dist"}
@@ -173,7 +180,7 @@ def main():
     print("=" * 70)
 
     embed_model = SentenceTransformer("BAAI/bge-small-en-v1.5",
-                                      cache_folder="/tmp/hf_cache")
+                                      cache_folder=os.environ.get("HF_HOME", os.path.join(os.path.expanduser("~"), ".cache", "huggingface")))
 
     indexing_results = {}
     retrieval_results = {}

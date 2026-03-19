@@ -20,12 +20,13 @@ from typing import List, Dict, Any, Optional
 
 random.seed(42)
 
+_REPO_BASE = os.environ.get("CHATGIT_REPO_BASE", "/tmp")
 REPOS = {
-    "flask":    "/tmp/flask_bench",
-    "requests": "/tmp/requests_bench",
-    "click":    "/tmp/click_bench",
-    "fastapi":  "/tmp/fastapi_bench",
-    "celery":   "/tmp/celery_bench",
+    "flask":    os.environ.get("CHATGIT_REPO_FLASK",    os.path.join(_REPO_BASE, "flask_bench")),
+    "requests": os.environ.get("CHATGIT_REPO_REQUESTS", os.path.join(_REPO_BASE, "requests_bench")),
+    "click":    os.environ.get("CHATGIT_REPO_CLICK",    os.path.join(_REPO_BASE, "click_bench")),
+    "fastapi":  os.environ.get("CHATGIT_REPO_FASTAPI",  os.path.join(_REPO_BASE, "fastapi_bench")),
+    "celery":   os.environ.get("CHATGIT_REPO_CELERY",   os.path.join(_REPO_BASE, "celery_bench")),
 }
 
 OUTPUT_PATH = "data/convcodebench/eval_conversations.jsonl"
