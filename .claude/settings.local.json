@@ -30,7 +30,26 @@
       "Bash(python3 -c \"\nimport sys; sys.path.insert\\(0,'.'\\)\nimport signal\n\ndef timeout_handler\\(sig, frame\\):\n    raise TimeoutError\\('Chunking timed out'\\)\n\nsignal.signal\\(signal.SIGALRM, timeout_handler\\)\nsignal.alarm\\(15\\)\n\ntry:\n    from chatgit.core.chunker import chunk_repository\n    docs = chunk_repository\\('/tmp/gin_bench'\\)\n    print\\(f'gin: {len\\(docs\\)} chunks OK'\\)\nexcept TimeoutError:\n    print\\('gin: TIMEOUT - skipping'\\)\nexcept Exception as e:\n    print\\(f'gin: ERROR {e}'\\)\nfinally:\n    signal.alarm\\(0\\)\n\" 2>&1)",
       "Bash(python3 evaluation/run_convcodebench.py 2>&1 | tee /tmp/bench_output.txt)",
       "Bash(python3 -c \"\nimport sys; sys.path.insert\\(0,'.'\\)\nimport chatgit.core.chunker as _ck\n_ck._count_tokens = lambda text: len\\(text\\) // 4\nfrom chatgit.core.chunker import chunk_repository\n\nSKIP = {'tests','test','docs','doc','examples','example','benchmarks','scripts','contrib','extras','tools'}\nfor repo, path in [\\('fastapi','/tmp/fastapi_bench'\\),\\('pydantic','/tmp/pydantic_bench'\\),\\('celery','/tmp/celery_bench'\\)]:\n    docs = chunk_repository\\(path\\)\n    kept = [d for d in docs if not \\(set\\(d.metadata['file_name'].replace\\('\\\\\\\\\\\\\\\\','/'\\).split\\('/'\\)\\) & SKIP\\)]\n    print\\(f'{repo}: {len\\(docs\\)} total → {len\\(kept\\)} src-only'\\)\n\" 2>&1 | grep -v \"^\\\\[Chunker\\\\]\")",
-      "Bash(python -u evaluation/run_convcodebench.py 2>&1)"
+      "Bash(python -u evaluation/run_convcodebench.py 2>&1)",
+      "Bash(for r:*)",
+      "Bash(do echo:*)",
+      "Read(//tmp/**)",
+      "Bash(done)",
+      "Bash(source venv/bin/activate 2>/dev/null; python -m evaluation.run_convcodebench 2>&1)",
+      "Bash(wc -l /Users/anishgupta/Desktop/ChatGIT/chatgit-react/frontend/src/components/*.jsx /Users/anishgupta/Desktop/ChatGIT/chatgit/core/*.py)",
+      "Bash(ls /Users/anishgupta/Desktop/ChatGIT/.env* 2>/dev/null; cat /Users/anishgupta/Desktop/ChatGIT/api.py | head -10)",
+      "Bash(curl -s -X POST http://127.0.0.1:8000/api/chat \\\\\n  -H \"Content-Type: application/json\" \\\\\n  -d '{\"message\": \"hello\", \"enhance_code\": false}' | python3 -m json.tool)",
+      "Bash(curl -s http://127.0.0.1:8000/api/current_repo)",
+      "Bash(ls /tmp/flask_bench /tmp/requests_bench /tmp/click_bench /tmp/fastapi_bench 2>&1 | head -5 && echo \"---\" && python3 -c \"import json; d=json.load\\(open\\('/Users/anishgupta/Desktop/ChatGIT/data/convcodebench/sample_conversations.jsonl'.replace\\('jsonl','jsonl'\\)\\)\\);print\\(d\\)\" 2>/dev/null; wc -l /Users/anishgupta/Desktop/ChatGIT/data/convcodebench/sample_conversations.jsonl)",
+      "Bash(python3 evaluation/build_eval_dataset.py)",
+      "Bash(python3 -m evaluation.run_full_eval 2>&1)",
+      "Bash(pkill -f run_full_eval 2>/dev/null; sleep 2; echo \"killed\")",
+      "Bash(TOKENIZERS_PARALLELISM=false python3 -m evaluation.run_full_eval 2>&1 | grep -v \"huggingface\\\\|tokenizers\\\\|Avoid\\\\|Explicitly\\\\|PARALLELISM\\\\|just got forked\\\\|Disabling\")",
+      "Bash(python3:*)",
+      "Bash(ls /tmp/*bench)",
+      "Bash(TOKENIZERS_PARALLELISM=false PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 python3 evaluation/run_full_eval.py 2>&1)",
+      "Bash(find /Users/anishgupta/Desktop/ChatGIT -type f -name README* -o -name setup.py -o -name pyproject.toml -o -name requirements.txt -o -name Makefile -o -name .env*)",
+      "Bash(grep -E \"\\\\.\\(md|txt\\)$\")"
     ]
   }
 }
