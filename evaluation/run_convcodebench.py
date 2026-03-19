@@ -742,7 +742,10 @@ def main():
             reports.append(full_comparison_report(
                 a, b, metric_name=f"{metric} vs {name}",
                 system_a_name="ChatGIT", system_b_name=name))
-    print_comparison_table(reports)
+    try:
+        print_comparison_table(reports)
+    except UnicodeEncodeError:
+        print("  (statistical table skipped — terminal encoding does not support Unicode)")
 
     # ── Save ──────────────────────────────────────────────────────────────────
     os.makedirs("results", exist_ok=True)
