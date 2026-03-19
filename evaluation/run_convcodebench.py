@@ -311,8 +311,15 @@ def run_chatgit(retrievers, queries, embed_model, k=10):
                 is_summary = node_type == "module_summary"
                 is_class_for_summarize = (node_type == "class"
                                           and cfg.intent == "summarize")
+                node_name_rid = chunks[i].get("node_name",
+                                              rid.split("::")[-1] if "::" in rid else rid)
+                is_same_referent = (
+                    cfg.intent in ("explain", "debug")
+                    and node_name_rid in session_mem._discussed_fns
+                )
                 if (rid in session_mem._retrieved
-                        and not is_summary and not is_class_for_summarize):
+                        and not is_summary and not is_class_for_summarize
+                        and not is_same_referent):
                     if cfg.intent == "summarize":
                         score *= 0.92
                     else:
@@ -522,8 +529,15 @@ def run_chatgit_config(retrievers, queries, embed_model, k=10,
                     is_summary = node_type == "module_summary"
                     is_class_for_summarize = (node_type == "class"
                                               and cfg.intent == "summarize")
+                    node_name_rid = chunks[i].get("node_name",
+                                                  rid.split("::")[-1] if "::" in rid else rid)
+                    is_same_referent = (
+                        cfg.intent in ("explain", "debug")
+                        and node_name_rid in session_mem._discussed_fns
+                    )
                     if (rid in session_mem._retrieved
-                            and not is_summary and not is_class_for_summarize):
+                            and not is_summary and not is_class_for_summarize
+                            and not is_same_referent):
                         if cfg.intent == "summarize":
                             score *= 0.92
                         else:

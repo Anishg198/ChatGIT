@@ -92,6 +92,10 @@ class SessionRetrievalMemory:
             # Fresh weight for this file
             self._active_files[fname] = max(self._active_files.get(fname, 0.0), 1.0)
 
+            # Any retrieved node is now "discussed" — enables same-referent
+            # continuation exemption on follow-up EXPLAIN/DEBUG turns
+            if node_name and node_name not in self._discussed_fns:
+                self._discussed_fns.append(node_name)
             for fn in chunk.get("matched_funcs", []):
                 if fn and fn not in self._discussed_fns:
                     self._discussed_fns.append(fn)
@@ -126,15 +130,24 @@ class SessionRetrievalMemory:
             chunk_id  = f"{fname}::{node_name}"
 
             # --- Redundancy penalty ---
-            # module_summary chunks are always exempt; class chunks are exempt
-            # for SUMMARIZE intent because "overview of X" questions legitimately
-            # re-retrieve the same core class definitions (Flask, Blueprint…)
-            # across multiple turns — penalising them destroys SUMMARIZE MRR.
+            # Exemptions (no penalty applied):
+            # 1. module_summary chunks: always exempt
+            # 2. class chunks for SUMMARIZE: "overview of X" legitimately
+            #    re-retrieves the same class definition across turns
+            # 3. Same-referent continuation: if intent is explain/debug and
+            #    this chunk's function was discussed in a previous turn, the
+            #    user is asking a follow-up about the SAME function — the chunk
+            #    is the correct answer and must not be suppressed.
             is_class_for_summarize = (node_type == "class"
                                       and intent == "summarize")
+            is_same_referent_continuation = (
+                intent in ("explain", "debug")
+                and node_name in self._discussed_fns
+            )
             if (chunk_id in self._retrieved
                     and node_type != "module_summary"
-                    and not is_class_for_summarize):
+                    and not is_class_for_summarize
+                    and not is_same_referent_continuation):
                 last_seen  = max(self._retrieved[chunk_id])
                 turns_ago  = self.turn - last_seen
                 if intent == "summarize":
