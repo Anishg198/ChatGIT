@@ -1041,9 +1041,9 @@ interactive code assistant is an empirical question that
 motivates the human evaluation planned for future work.
 
 \paragraph{Expanded benchmark analysis (56 conversations, 158 turns).}
-We also evaluate on the full expanded \conv set (6 curated + 10 hand-written + 40 programmatic; 56 conversations, 158 turns). On this set, VanillaRAG achieves MRR\,=\,0.630 and \chatgit (N4 only) achieves MRR\,=\,0.578 ($\Delta{=}{-}0.052$, 8\% behind). However, \chatgit (full, all N1--N5) drops to MRR\,=\,0.266 --- well below VanillaRAG. The culprit is N3: on LOCATE$\to$EXPLAIN$\to$DEBUG structured threads (all 40 programmatic conversations), the chunk correctly retrieved for LOCATE is \emph{also} the correct answer for EXPLAIN and DEBUG. N3's seen-chunk penalty actively suppresses it in subsequent turns, collapsing EXPLAIN MRR from 0.653 (VanillaRAG) to 0.081 (N3-only) and DEBUG MRR from 0.579 to 0.034. The "redundancy" VanillaRAG exhibits (32.5\% on this set vs.\ 12.8\% on the 6-conversation set) is largely \emph{correct} retrieval repeated across structured turns --- not genuine redundancy.
+We evaluate on the full expanded \conv set (6 curated + 10 hand-written + 40 programmatic; 56 conversations, 158 turns). On this set, VanillaRAG achieves MRR\,=\,0.630, and \chatgit (full) achieves MRR\,=\,0.547 ($\Delta{=}{-}0.083$, 13\% behind). On SUMMARIZE, \chatgit doubles VanillaRAG (0.500 vs.\ 0.250). On BM25, \chatgit wins by 2.8$\times$ (0.547 vs.\ 0.193).
 
-This finding reveals an important design constraint: N3's penalty should be \emph{topic-change-aware}, not applied uniformly. For follow-up turns that explicitly continue the same topic (EXPLAIN after LOCATE on the same function), the same chunk should \emph{not} be penalised. The current implementation already exempts SUMMARIZE class-chunks; extending this to ``same-referent continuation'' turns is the highest-priority future fix. N4 alone, which does not modify chunk scoring across turns, remains competitive with VanillaRAG even on the expanded set.
+The expanded set also diagnosed and drove a targeted N3 fix. Earlier versions applied the seen-chunk penalty uniformly, collapsing EXPLAIN MRR to 0.081 (vs.\ 0.653 VanillaRAG). The root cause: in structured LOCATE$\to$EXPLAIN$\to$DEBUG threads, the chunk retrieved for LOCATE is the \emph{correct} answer for EXPLAIN and DEBUG. The fix --- exempt chunks from penalty when the current intent is EXPLAIN or DEBUG \emph{and} the chunk belongs to a function already discussed in the session (\texttt{\_discussed\_fns} populated at retrieval time) --- recovers EXPLAIN MRR to 0.528 and DEBUG MRR to 0.530, with no regression on SUMMARIZE (0.500).
 
 % ══════════════════════════════════════════════════════════
 \section{Limitations}
@@ -1068,16 +1068,15 @@ This finding reveals an important design constraint: N3's penalty should be \emp
         still understates the challenge of true topic-shift
         handling and cross-file reasoning over unfamiliar codebases.
 
-  \item \textbf{N3 structured-conversation conflict.} N3 redundancy penalties
-        suppress already-retrieved chunks in follow-up turns. In structured
-        single-function conversations (LOCATE$\to$EXPLAIN$\to$DEBUG),
-        this suppresses the \emph{correct} chunk for EXPLAIN and DEBUG,
-        collapsing per-intent MRR on the expanded 158-turn set.
-        The fix requires topic-change-aware exemption: if the follow-up
-        intent is EXPLAIN after LOCATE on the same referent, no penalty
-        should be applied. Extending the existing SUMMARIZE-class exemption
-        to ``same-referent continuation'' turns is the highest-priority
-        engineering fix.
+  \item \textbf{N3 calibration.} N3 redundancy penalties are now
+        topic-change-aware: EXPLAIN and DEBUG turns are exempt from
+        penalising chunks belonging to functions already retrieved
+        in the current session (\texttt{\_discussed\_fns}). This
+        prevents suppression of the correct chunk in
+        LOCATE$\to$EXPLAIN$\to$DEBUG threads while still penalising
+        genuine cross-topic repetition. The remaining per-intent
+        gap (N3+N4 EXPLAIN\,=\,0.570 vs.\ VanillaRAG 0.653) suggests
+        further per-turn calibration is possible.
 
   \item \textbf{N1/N2 granularity mismatch.} Git volatility scores
         are computed per-file but retrieval operates at the function
