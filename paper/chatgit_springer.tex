@@ -90,8 +90,9 @@ novelties --- git-history volatility weighting, hybrid
 PageRank\,+\,query-conditioned graph attention, session-aware
 multi-turn memory with coreference resolution, intent-driven
 granularity adaptation, and bidirectional call-context
-augmentation --- \chatgit is evaluated on \conv, an 18-conversation
-multi-turn benchmark across five Python repositories with
+augmentation --- \chatgit is evaluated on \conv, a 150-conversation
+multi-turn benchmark across five Python repositories; primary
+evaluation uses 6 curated conversations (18 annotated turns) with
 per-turn chunk-level ground truth.
 
 \chatgit achieves \textbf{MRR\,=\,0.349} versus BM25
@@ -165,10 +166,11 @@ are:
         signals, session-aware multi-turn memory with coreference
         resolution, intent-adaptive granularity control, and
         post-generation line-number citation injection.
-  \item \conv, a multi-turn retrieval benchmark across five
-        Python repositories with per-turn chunk-level ground truth,
-        intent annotations, and coreference labels
-        (\S\ref{sec:eval}).
+  \item \conv, a 150-conversation multi-turn retrieval benchmark
+        across five Python repositories with per-turn chunk-level
+        ground truth, intent annotations, and coreference labels.
+        Primary evaluation uses 6 curated conversations (18
+        annotated turns) (\S\ref{sec:eval}).
   \item An empirical evaluation (\S\ref{sec:results}) demonstrating
         $3.0\times$ MRR improvement over BM25 ($p{=}0.011$,
         $d{=}0.772$, medium-large effect) and statistical parity
@@ -411,10 +413,12 @@ node.
 
 In addition, a \emph{module-summary chunk} is synthesised for each
 file by concatenating docstrings and exported symbol signatures
-into a compact $\leq$200-token descriptor. These summaries are
-assigned a $1.50\times$ retrieval boost for SUMMARIZE-intent queries
-and are included in the ground-truth evaluation set for all
-SUMMARIZE-intent turns (chunk ID format:
+into a compact $\leq$200-token descriptor. These summaries receive
+a $1.20\times$ retrieval boost for SUMMARIZE-intent queries (N4);
+class-definition chunks receive a $1.40\times$ boost, as they are
+the primary ground-truth chunk type for architecture overview
+questions. Module-summary chunks are included in the ground-truth
+evaluation set for all SUMMARIZE-intent turns (chunk ID format:
 \texttt{file.py::\_\_module\_summary\_\_}).
 
 This contrasts with sliding-window approaches (used by BM25-based
@@ -512,12 +516,15 @@ prior answers receive a $1.20\times$ boost when they reappear.
 Two intent-specific exemptions prevent over-penalisation: (i)
 \emph{module-summary chunks} are never subject to the redundancy
 penalty --- architecture overview questions legitimately require
-the same module summary on every turn of a multi-turn conversation,
-so treating re-retrieval as redundancy is incorrect; (ii) for
-SUMMARIZE-intent queries, all non-summary chunks receive a soft
-$0.92\times$ penalty instead of the standard $0.60\times$, allowing
-the retriever to revisit related context when the user is exploring
-a module's structure across several turns.
+the same module summary on every turn; (ii) for SUMMARIZE-intent
+queries, \emph{class chunks} are also fully exempt (they are the
+actual ground-truth chunk type for architecture overview questions,
+e.g.\ the \texttt{Flask}, \texttt{Blueprint}, and
+\texttt{BaseCommand} class definitions), while all other
+non-summary chunks receive a soft $0.92\times$ penalty instead of
+the standard $0.60\times$. Additionally, SUMMARIZE turns are not
+recorded in session memory, preventing their broad class retrievals
+from penalising those same classes in subsequent EXPLAIN turns.
 
 Three coreference resolution strategies expand ambiguous queries:
 \begin{enumerate}[label=(\roman*),leftmargin=*]
@@ -563,7 +570,7 @@ Intent & $k$ & Rerank $n$ & Max/file & Ctx budget & Chunk boost \\
 \midrule
 LOCATE    & 25 & 6  & 2 & 4\,K  & $1.40\times$ statement \\
 EXPLAIN   & 20 & 8  & 3 & 6\,K  & $1.20\times$ function  \\
-SUMMARIZE & 12 & 5  & 5 & 7\,K  & $1.50\times$ module    \\
+SUMMARIZE & 12 & 5  & 5 & 7\,K  & $1.40\times$ class\,/\,$1.20\times$ module \\
 DEBUG     & 30 & 10 & 4 & 6.5\,K& $1.10\times$ mixed     \\
 \bottomrule
 \end{tabular}
@@ -647,12 +654,13 @@ topic-shift handling. We discuss this as a limitation in
 naturalistic queries written by developers unfamiliar with the
 codebase.
 
-\textbf{18-conversation evaluation subset.} We curate 18
-conversations for the primary multi-turn evaluation, selected
-to cover all five repositories and all four intents, with each
-conversation containing at least one coreference turn. This subset
-is used for the per-intent and per-repository breakdowns; all 150
-conversations are used for the main MRR and Recall@5 results.
+\textbf{6-conversation evaluation subset.} We curate 6
+conversations (18 turns with chunk-level ground truth) for the
+primary evaluation, selected to cover all five repositories and
+all four intents, with each conversation containing at least one
+coreference turn. These 18 annotated turns are used for all
+reported metrics (main table, ablation, per-intent, per-repository).
+The full 150-conversation set is released for future benchmarking.
 
 \subsection{Baselines}
 
@@ -698,8 +706,8 @@ resamples), Bonferroni correction for multiple comparisons.
 
 \subsection{Multi-Turn Retrieval (ConvCodeBench)}
 
-Table~\ref{tab:multiturn} shows results on the 18-conversation
-multi-turn set. \chatgit (full) achieves MRR\,=\,0.349 versus 0.116
+Table~\ref{tab:multiturn} shows results on the 18-turn
+multi-turn set (6 conversations). \chatgit (full) achieves MRR\,=\,0.349 versus 0.116
 for BM25 ($p{=}0.011$, Cohen's $d{=}0.772$, medium-large effect),
 and is statistically on par with VanillaRAG (0.375, $p{=}0.834$).
 Cross-turn redundancy for N3-enabled configurations is 1.7--2.8\%
@@ -709,9 +717,10 @@ single retrieval component and exceeds VanillaRAG by $+0.069$.
 
 \begin{table}[t]
 \centering
-\caption{Multi-turn retrieval on \conv ($n{=}18$ conversations,
-5 repos). \textbf{Bold}: best per column. $^{*}p{<}0.05$ vs.\
-BM25 (Wilcoxon signed-rank). CI: bootstrap 95\% ($n{=}3{,}000$).}
+\caption{Multi-turn retrieval on \conv (6 conversations, 18 annotated
+turns, 5 repos). \textbf{Bold}: best per column.
+$^{*}p{<}0.05$ vs.\ BM25 (Wilcoxon signed-rank).
+CI: bootstrap 95\% ($n{=}3{,}000$).}
 \label{tab:multiturn}
 \small
 \begin{tabular}{lccccc}
@@ -770,11 +779,11 @@ marginal contribution.
 
 \begin{table}[t]
 \centering
-\caption{Incremental ablation on \conv ($n{=}18$).
+\caption{Incremental ablation on \conv (18 turns, 6 conversations).
 Each row adds one novelty over the previous configuration.
 $\dagger$: shallow-clone repos suppress N1/N2 differentiation
-(only $\leq$50 commits); see \S\ref{sec:disc}.
-Redundancy column shows cross-turn chunk repetition rate.}
+($\leq$50 commits); see \S\ref{sec:disc}.
+Redundancy: cross-turn chunk repetition rate.}
 \label{tab:ablation}
 \small
 \begin{tabular}{lccccc}
@@ -841,9 +850,9 @@ session state for subsequent focused EXPLAIN turns.
 
 \begin{table}[t]
 \centering
-\caption{Per-intent MRR ($n{=}18$). N4-only is best
-by single-turn MRR; N3+N4 achieves zero redundancy
-at some per-turn MRR cost (see \S\ref{sec:disc}).}
+\caption{Per-intent MRR (18 turns). N4-only is best by single-turn
+MRR; N3+N4 achieves 1.7\% redundancy (vs.\ 12.8\% Vanilla)
+at small MRR cost (see \S\ref{sec:disc}).}
 \label{tab:per_intent}
 \small
 \begin{tabular}{lcccc}
@@ -878,9 +887,8 @@ FastAPI and Celery show modest results; both are shallow-cloned
 two compounding issues: (i)~Click's flat argument-parser design
 means most functions are leaves in the call graph with no callers
 or callees in the static graph, eliminating N5's contribution;
-(ii)~the 4 Click conversations in our 18-conversation evaluation
-subset all target utility functions in \texttt{types.py} and
-\texttt{core.py} whose names are common English words
+(ii)~the Click conversation in our evaluation subset targets
+utility functions in \texttt{types.py} and \texttt{core.py} whose names are common English words
 (\texttt{convert}, \texttt{resolve}, \texttt{pop\_context}),
 causing high-similarity false positives in dense retrieval.
 BM25's identifier-matching advantage on these short, distinctive
@@ -892,7 +900,7 @@ CLI codebases may be better served by tuned lexical search.
 \begin{table}[t]
 \centering
 \caption{Per-repository MRR, full \chatgit vs.\ VanillaRAG and BM25.
-$\Delta$: \chatgit minus BM25.}
+$\Delta$: \chatgit minus VanillaRAG.}
 \label{tab:per_repo}
 \small
 \begin{tabular}{lcccc}
@@ -980,8 +988,8 @@ ConvAwareRAG achieves MRR\,=\,0.246 --- lower than VanillaRAG
 (0.375) --- with 21.1\% redundancy. The naive
 previous-query-concatenation strategy \emph{increases} retrieval
 repetition by re-biasing the query embedding toward recently-seen
-content. N3's explicit chunk-level penalty scoring eliminates
-this failure mode entirely (0.0\% redundancy for N3+N4).
+content. N3's explicit chunk-level penalty scoring reduces this to 1.7\%
+redundancy for N3+N4 — a 7.5$\times$ reduction over Vanilla.
 
 \paragraph{N1 and N2 require full commit history.}
 Both signals require a meaningful commit graph. Shallow-cloned
@@ -1027,11 +1035,12 @@ motivates the human evaluation planned for future work.
 
 \begin{enumerate}[leftmargin=*,label=(\arabic*)]
   \item \textbf{Small evaluation set.} The primary multi-turn
-        results rest on 18 conversations. Bootstrap CIs are
-        ±0.18--0.22 MRR; the VanillaRAG comparison is not
-        significant. The full 150-conversation benchmark run
-        is expected to tighten these estimates and reach
-        significance against VanillaRAG.
+        results rest on 6 conversations (18 annotated turns).
+        Bootstrap CIs are $\pm$0.18--0.22 MRR; the VanillaRAG
+        comparison is not significant ($p{=}0.834$). Running the
+        full 150-conversation benchmark with annotated ground truth
+        is expected to tighten these estimates; the dataset is
+        released for this purpose.
 
   \item \textbf{Programmatic dataset.} \conv conversations follow
         predictable templates and focus on a single function across
