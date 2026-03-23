@@ -74,6 +74,7 @@ class ServerContext:
         self.code_ast = None
         self.graph_analyzer = None
         self.conversation_log = []
+        self.services_initialized = False
 
 # Single global instance
 session = ServerContext()
@@ -448,6 +449,8 @@ async def process_chat(payload: MessagePayload):
     ensure_services()
     if not session.search_index:
         raise HTTPException(status_code=400, detail="Repository not loaded")
+    if not session.llm_client:
+        raise HTTPException(status_code=500, detail="LLM not initialized — check GROQ_API_KEY in .env")
     
     query = payload.message
     session.conversation_log.append({"role": "user", "content": query})
