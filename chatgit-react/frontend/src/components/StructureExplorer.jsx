@@ -117,7 +117,7 @@ const StructureExplorer = () => {
     useEffect(() => {
         const fetchStructure = async () => {
             try {
-                const res = await axios.get('${API_BASE_URL}/api/structure');
+                const res = await axios.get(`${API_BASE_URL}/api/structure`);
                 const rawFiles = res.data; // Dict of "path/to/file": { metadata }
 
                 // Build Tree

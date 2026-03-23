@@ -12,9 +12,9 @@ const Dashboard = ({ metrics }) => {
         const loadAnalysisData = async () => {
             try {
                 const [filesRes, funcsRes, modsRes] = await Promise.all([
-                    axios.get('${API_BASE_URL}/api/pagerank/files'),
-                    axios.get('${API_BASE_URL}/api/pagerank/functions'),
-                    axios.get('${API_BASE_URL}/api/pagerank/modules')
+                    axios.get(`${API_BASE_URL}/api/pagerank/files`),
+                    axios.get(`${API_BASE_URL}/api/pagerank/functions`),
+                    axios.get(`${API_BASE_URL}/api/pagerank/modules`)
                 ]);
 
                 setTopFiles(filesRes.data);

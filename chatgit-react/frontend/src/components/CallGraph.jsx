@@ -12,7 +12,7 @@ const CallGraph = () => {
 
     useEffect(() => {
         // Fetch list of functions for dropdown
-        axios.get('${API_BASE_URL}/api/call_graph')
+        axios.get(`${API_BASE_URL}/api/call_graph`)
             .then(res => {
                 if (res.data.functions) setNodeList(['Show All', ...res.data.functions]);
             })
@@ -22,7 +22,7 @@ const CallGraph = () => {
     useEffect(() => {
         const loadGraph = async () => {
             try {
-                const res = await axios.post('${API_BASE_URL}/api/call_graph/visualize', { target: focusedNode });
+                const res = await axios.post(`${API_BASE_URL}/api/call_graph/visualize`, { target: focusedNode });
                 if (res.data.nodes) {
                     const connections = res.data.edges.map(e => ({
                         source: e.source,

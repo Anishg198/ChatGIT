@@ -8,6 +8,9 @@ from dotenv import load_dotenv
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
 
+# Import torch first to register DLL search paths before llama_index pulls it in
+import torch  # noqa: F401
+
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel

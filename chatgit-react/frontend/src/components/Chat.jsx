@@ -30,7 +30,7 @@ const Chat = ({ chatLog, codeEnhancement }) => {
         setIsWaitingResponse(true);
 
         try {
-            const apiResponse = await axios.post('${API_BASE_URL}/api/chat', { message: newTask.content, enhance_code: codeEnhancement });
+            const apiResponse = await axios.post(`${API_BASE_URL}/api/chat`, { message: newTask.content, enhance_code: codeEnhancement });
             setConversation(apiResponse.data.history);
         } catch (err) {
             console.error("Communication failure", err);

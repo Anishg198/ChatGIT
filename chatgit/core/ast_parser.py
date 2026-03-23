@@ -201,7 +201,7 @@ def generate_repo_ast(repo_path):
         
         for file in files:
             file_path = os.path.join(root, file)
-            relative_path = os.path.relpath(file_path, repo_path)
+            relative_path = os.path.relpath(file_path, repo_path).replace('\\', '/')
             
             try:
                 # Determine file type
