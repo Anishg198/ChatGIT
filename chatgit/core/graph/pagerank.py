@@ -67,7 +67,7 @@ class CodePageRankAnalyzer:
                 tree = ast.parse(content, filename=str(file_path))
             
             for node in ast.walk(tree):
-                if isinstance(node, ast.FunctionDef):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     func_full_name = f"{relative_path}::{node.name}"
                     self.function_graph.add_node(func_full_name)
                     self.function_name_to_full[node.name].append(func_full_name)
@@ -139,7 +139,7 @@ class CodePageRankAnalyzer:
                         self.file_info[relative_path]['imports'].append(node.module)
                 
                 # Analyze functions
-                elif isinstance(node, ast.FunctionDef):
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     func_full_name = f"{relative_path}::{node.name}"
                     self.function_info[func_full_name] = {
                         'name': node.name,
@@ -468,7 +468,64 @@ class CodePageRankAnalyzer:
             return sorted(centrality.items(), key=lambda x: x[1], reverse=True)[:top_n]
         except:
             return []
-    
+
+    def get_hits_scores(self, top_n: int = 10):
+        """
+        Run the HITS (Hyperlink-Induced Topic Search) algorithm on the
+        function call graph.
+
+        Hubs    = functions that call many important functions
+                  (e.g. orchestrators, controllers, main entry points)
+        Authorities = functions called by many important hubs
+                      (e.g. core utilities, shared helpers, critical business logic)
+
+        Returns dict with keys 'hubs' and 'authorities', each a list of
+        (qualified_name, score) tuples sorted descending.
+        """
+        if (len(self.function_graph.nodes()) == 0
+                or len(self.function_graph.edges()) == 0):
+            return {"hubs": [], "authorities": []}
+        try:
+            hubs, authorities = nx.hits(
+                self.function_graph, max_iter=200, normalized=True
+            )
+            top_hubs  = sorted(hubs.items(),        key=lambda x: x[1], reverse=True)[:top_n]
+            top_auths = sorted(authorities.items(), key=lambda x: x[1], reverse=True)[:top_n]
+            return {"hubs": top_hubs, "authorities": top_auths}
+        except Exception as exc:
+            print(f"[HITS] Function graph error: {exc}")
+            return {"hubs": [], "authorities": []}
+
+    def get_file_hits_scores(self, top_n: int = 10):
+        """
+        Run HITS on the file import/dependency graph.
+
+        File Hubs       = files that import many widely-used modules
+                          (entry points, CLI runners, app factories)
+        File Authorities = files imported by many entry points
+                           (core libraries, shared models, base classes)
+        """
+        if (len(self.file_graph.nodes()) == 0
+                or len(self.file_graph.edges()) == 0):
+            return {"hubs": [], "authorities": []}
+        try:
+            hubs, authorities = nx.hits(
+                self.file_graph, max_iter=200, normalized=True
+            )
+            _exts = {'.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.cpp', '.c', '.h'}
+            def _is_file(n):
+                return any(n.endswith(e) for e in _exts) or '/' in n or '\\' in n
+
+            file_hubs  = {k: v for k, v in hubs.items()        if _is_file(k)}
+            file_auths = {k: v for k, v in authorities.items() if _is_file(k)}
+
+            top_hubs  = sorted(file_hubs.items(),  key=lambda x: x[1], reverse=True)[:top_n]
+            top_auths = sorted(file_auths.items(), key=lambda x: x[1], reverse=True)[:top_n]
+            return {"hubs": top_hubs, "authorities": top_auths}
+        except Exception as exc:
+            print(f"[HITS] File graph error: {exc}")
+            return {"hubs": [], "authorities": []}
+
     def get_file_metrics(self, file_path):
         """Get all metrics for a specific file"""
         if file_path not in self.file_info:

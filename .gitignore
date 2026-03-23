@@ -35,3 +35,12 @@ venv/
 env/
 .env
 .claude/
+
+# Node
+node_modules/
+dist/
+build/
+*.egg-info/
+
+# Benchmark repos (cloned locally, not part of project)
+*_bench/

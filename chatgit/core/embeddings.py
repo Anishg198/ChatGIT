@@ -17,7 +17,7 @@ def load_embedding_model(
         Initialized embedding model
     """
     if model_name is None:
-        model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5")
+        model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
         
     model_kwargs = {"device": device}
     encode_kwargs = {"normalize_embeddings": True}
