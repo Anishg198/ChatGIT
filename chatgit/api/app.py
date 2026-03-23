@@ -871,6 +871,9 @@ Answer:"""
                 "role": "system",
                 "content": (
                     "You are ChatGIT, an expert code assistant. "
+                    "Always respond in plain markdown prose — use headings, bullet points, and bold text for structure. "
+                    "Only use fenced code blocks (``` ```) for actual code snippets, never for explanatory text. "
+                    "Do NOT wrap your entire answer in a code block. "
                     "Always cite exact filenames and line numbers. "
                     "Be precise and grounded in the provided code."
                 ),

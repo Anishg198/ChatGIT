@@ -57,7 +57,9 @@
       "Bash(pip show:*)",
       "Bash(python:*)",
       "Bash(CHATGIT_REPO_FLASK=\"C:/Users/Prakhar/Desktop/bench_repos/flask_bench\" CHATGIT_REPO_REQUESTS=\"C:/Users/Prakhar/Desktop/ChatGIT/requests_bench\" CHATGIT_REPO_CLICK=\"C:/Users/Prakhar/Desktop/ChatGIT/click_bench\" CHATGIT_REPO_FASTAPI=\"C:/Users/Prakhar/Desktop/bench_repos/fastapi_bench\" CHATGIT_REPO_CELERY=\"C:/Users/Prakhar/Desktop/ChatGIT/celery_bench\" python -m evaluation.run_convcodebench)",
-      "Bash(PYTHONIOENCODING=utf-8 CHATGIT_REPO_FLASK=\"C:/Users/Prakhar/Desktop/bench_repos/flask_bench\" CHATGIT_REPO_REQUESTS=\"C:/Users/Prakhar/Desktop/ChatGIT/requests_bench\" CHATGIT_REPO_CLICK=\"C:/Users/Prakhar/Desktop/ChatGIT/click_bench\" CHATGIT_REPO_FASTAPI=\"C:/Users/Prakhar/Desktop/bench_repos/fastapi_bench\" CHATGIT_REPO_CELERY=\"C:/Users/Prakhar/Desktop/ChatGIT/celery_bench\" python -m evaluation.run_convcodebench)"
+      "Bash(PYTHONIOENCODING=utf-8 CHATGIT_REPO_FLASK=\"C:/Users/Prakhar/Desktop/bench_repos/flask_bench\" CHATGIT_REPO_REQUESTS=\"C:/Users/Prakhar/Desktop/ChatGIT/requests_bench\" CHATGIT_REPO_CLICK=\"C:/Users/Prakhar/Desktop/ChatGIT/click_bench\" CHATGIT_REPO_FASTAPI=\"C:/Users/Prakhar/Desktop/bench_repos/fastapi_bench\" CHATGIT_REPO_CELERY=\"C:/Users/Prakhar/Desktop/ChatGIT/celery_bench\" python -m evaluation.run_convcodebench)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)"
     ]
   }
 }
