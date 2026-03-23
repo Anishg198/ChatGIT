@@ -23,7 +23,7 @@ _ck._count_tokens = lambda text: len(text) // 4
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from chatgit.core.chunker import chunk_repository
-from evaluation.eval_generation import EvaluationResult, evaluate_generation
+from evaluation.eval_generation import evaluate_generation
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _REPO_BASE = os.environ.get("CHATGIT_REPO_BASE", "/tmp")
@@ -95,7 +95,8 @@ def main():
     embed_model = SentenceTransformer(
         "BAAI/bge-small-en-v1.5",
         cache_folder=os.environ.get("HF_HOME",
-            os.path.join(os.path.expanduser("~"), ".cache", "huggingface"))
+            os.path.join(os.path.expanduser("~"), ".cache", "huggingface")),
+        device="cpu"
     )
 
     # Build chunk indices per repo
@@ -137,11 +138,13 @@ def main():
     print(f"  CodeBLEU-proxy:    {summary['code_bleu']['mean']:.3f} "
           f"(CI: {summary['code_bleu']['ci_lo']:.3f}–{summary['code_bleu']['ci_hi']:.3f})")
     print(f"  Edit Similarity:   {summary['edit_similarity']['mean']:.3f}")
-    print(f"  BERTScore-proxy:   {summary['bert_score']['mean']:.3f}")
+    print(f"  BERTScore-proxy:   {summary['bertscore_f1']['mean']:.3f}")
     if "per_intent" in results:
-        print("\n  Per-intent ROUGE-L:")
+        print("\n  Per-intent ROUGE-L and CodeBLEU:")
         for intent, m in sorted(results["per_intent"].items()):
-            print(f"    {intent:<12} {m.get('rouge_l', {}).get('mean', 0):.3f}")
+            rl = m.get('rouge_l', 0)
+            cb = m.get('code_bleu', 0)
+            print(f"    {intent:<12} ROUGE-L={rl:.3f}  CodeBLEU={cb:.3f}")
 
     # Save
     os.makedirs("results", exist_ok=True)

@@ -152,12 +152,19 @@ def evaluate_retrieval(
         arr = np.array(vals)
         summary[metric] = bootstrap_ci(arr, n_resamples=n_bootstrap)
 
-    # Per-intent breakdown
+    # Per-intent breakdown — mean + bootstrap CI for each metric
     per_intent = {}
     for intent, metrics in intent_scores.items():
-        per_intent[intent] = {
-            m: float(np.mean(vals)) for m, vals in metrics.items()
-        }
+        per_intent[intent] = {}
+        for m, vals in metrics.items():
+            arr = np.array(vals)
+            if len(arr) >= 5:
+                ci = bootstrap_ci(arr, n_resamples=n_bootstrap)
+                per_intent[intent][m] = ci
+            else:
+                per_intent[intent][m] = {"mean": float(arr.mean()),
+                                          "ci_lo": float(arr.min()),
+                                          "ci_hi": float(arr.max())}
 
     return {
         "per_query":  per_query,
@@ -181,9 +188,13 @@ def print_retrieval_report(results: Dict[str, Any], title: str = "Retrieval Resu
     if results.get("per_intent"):
         print("\n  Per-Intent Breakdown:")
         for intent, scores in results["per_intent"].items():
-            mrr = scores.get("mrr", 0)
-            r5  = scores.get("recall@5", 0)
-            print(f"    {intent:<12} MRR={mrr:.4f}  Recall@5={r5:.4f}")
+            mrr_s = scores.get("mrr", {})
+            r5_s  = scores.get("recall@5", {})
+            mrr   = mrr_s.get("mean", mrr_s) if isinstance(mrr_s, dict) else float(mrr_s)
+            r5    = r5_s.get("mean", r5_s)   if isinstance(r5_s,  dict) else float(r5_s)
+            mrr_ci = mrr_s.get("ci_hi", mrr) - mrr_s.get("ci_lo", mrr) \
+                     if isinstance(mrr_s, dict) else 0.0
+            print(f"    {intent:<12} MRR={mrr:.4f}±{mrr_ci/2:.4f}  Recall@5={r5:.4f}")
     print()
 
 

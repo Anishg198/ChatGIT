@@ -94,6 +94,25 @@ class BM25:
     def retrieve_ids(self, query: str, k: int = 10) -> List[str]:
         return [cid for cid, _ in self.retrieve(query, k)]
 
+    def score_all(self, query: str) -> np.ndarray:
+        """Return BM25 scores for all corpus documents as a numpy array."""
+        q_terms = self._tokenize(query)
+        scores = np.zeros(len(self._corpus), dtype=np.float32)
+        for doc_idx, doc in enumerate(self._corpus):
+            tf_map = Counter(doc)
+            dl = len(doc)
+            score = 0.0
+            for term in q_terms:
+                if term not in tf_map:
+                    continue
+                tf = tf_map[term]
+                idf = self._idf.get(term, 0.0)
+                num = tf * (self.k1 + 1)
+                den = tf + self.k1 * (1 - self.b + self.b * dl / self._avgdl)
+                score += idf * num / den
+            scores[doc_idx] = score
+        return scores
+
 
 # ===========================================================================
 # TF-IDF Vector Baseline (lightweight stand-in for BGE when not available)
