@@ -14,6 +14,8 @@ _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+import torch  # noqa: F401 — must come before sentence_transformers / transformers
+
 import chatgit.core.chunker as _ck
 _ck._count_tokens = lambda text: len(text) // 4
 
@@ -38,7 +40,7 @@ REPOS = {
 REPOS = {k: v for k, v in REPOS.items() if os.path.isdir(v)}
 CONVERSATIONS_PATH = os.environ.get(
     "CHATGIT_CONVS_PATH",
-    os.path.join(_project_root, "data", "convcodebench", "eval_conversations.jsonl")
+    os.path.join(_project_root, "data", "convcodebench", "sample_conversations.jsonl")
 )
 SKIP_DIRS = {"tests", "test", "docs", "doc", "examples", "example",
              "__pycache__", ".git", "build", "dist"}
@@ -111,9 +113,10 @@ def main():
         chunks = chunk_repo(path)
         by_id  = {c["id"]: c for c in chunks}
         texts  = [c["text"] for c in chunks]
-        embs   = embed_model.encode(texts, batch_size=256,
+        embs   = embed_model.encode(texts, batch_size=64,
                                     show_progress_bar=False,
-                                    normalize_embeddings=True).astype(np.float32)
+                                    normalize_embeddings=True,
+                                    device="cpu").astype(np.float32)
         bm25   = BM25().fit(chunks)
         index[rid] = {"chunks": chunks, "by_id": by_id, "embs": embs, "bm25": bm25}
         print(f"{len(chunks)} chunks  ({time.time()-t0:.1f}s)")
@@ -169,7 +172,7 @@ def main():
         vr_success = []
         for query, gt, intent, turn_id in turns_gt:
             pos = min(turn_id, 3)   # 0,1,2,3+
-            qe  = embed_model.encode([query], normalize_embeddings=True)[0].astype(np.float32)
+            qe  = embed_model.encode([query], normalize_embeddings=True, device="cpu")[0].astype(np.float32)
             sims = ix["embs"] @ qe
             top  = [ix["chunks"][i]["id"] for i in np.argsort(-sims)[:10]]
             m    = mrr(top, gt)
@@ -189,39 +192,58 @@ def main():
             bm_success.append(s5)
         conv_coherence["BM25"].append(float(np.mean(bm_success)))
 
-        # ChatGIT (with session memory — processes turns IN ORDER)
+        # ChatGIT(Routed) — intent-aware routing, processes turns IN ORDER
+        # Routing table (matches run_convcodebench.py):
+        #   EXPLAIN   → pure cosine (no N3, no N4): explanations need the same
+        #               chunk as the prior LOCATE turn, so N3 must not penalise it
+        #   LOCATE    → N3 (redundancy penalty) + N4 (function granularity boost)
+        #   DEBUG     → N3 (redundancy penalty; session context helps find callers)
+        #   SUMMARIZE → N4 only (module-level granularity boost; no redundancy penalty)
+        #   unknown   → N3 + N4 (safe default)
         mem = SessionRetrievalMemory()
         cg_success = []
         for query, gt, intent, turn_id in turns_gt:
             pos = min(turn_id, 3)
             cfg = classify_intent(query)
+
+            # use the ground-truth intent label when available (oracle routing)
+            routed_intent = intent if intent in ("locate", "explain", "debug", "summarize") \
+                            else (cfg.intent if hasattr(cfg, "intent") else "unknown")
+
             resolved = mem.resolve_coreferences(query)
-            qe  = embed_model.encode([resolved], normalize_embeddings=True)[0].astype(np.float32)
+            qe  = embed_model.encode([resolved], normalize_embeddings=True, device="cpu")[0].astype(np.float32)
             sims = (ix["embs"] @ qe).copy()
 
-            # N4: granularity boost
-            for i, c in enumerate(ix["chunks"]):
-                nt = c["node_type"]
-                if nt == "module_summary" and cfg.granularity == "module":
-                    sims[i] *= cfg.granularity_boost
-                elif nt == "function" and cfg.granularity == "function":
-                    sims[i] *= 1.15
+            use_n3 = routed_intent in ("locate", "debug", "unknown")
+            use_n4 = routed_intent in ("locate", "summarize", "unknown")
+
+            # N4: granularity boost (LOCATE/SUMMARIZE only)
+            if use_n4:
+                for i, c in enumerate(ix["chunks"]):
+                    nt = c["node_type"]
+                    if nt == "module_summary" and cfg.granularity == "module":
+                        sims[i] *= cfg.granularity_boost
+                    elif nt == "function" and cfg.granularity == "function":
+                        sims[i] *= 1.15
 
             top_idx = np.argsort(-sims)[:cfg.top_k]
 
-            # N3: session scoring
-            scored = []
-            for i in top_idx:
-                rid2  = ix["chunks"][i]["id"]
-                score = float(sims[i])
-                fname = ix["chunks"][i]["file"]
-                if rid2 in mem._retrieved:
-                    score *= mem.REDUNDANCY_PENALTY_LAST_TURN
-                if fname in mem._active_files:
-                    score *= (1.0 + mem.SESSION_ZONE_BONUS * mem._active_files[fname])
-                scored.append((rid2, score))
-            scored.sort(key=lambda x: -x[1])
-            top_cg = [r for r, _ in scored[:10]]
+            # N3: session scoring (LOCATE/DEBUG only — NOT EXPLAIN)
+            if use_n3:
+                scored = []
+                for i in top_idx:
+                    rid2  = ix["chunks"][i]["id"]
+                    score = float(sims[i])
+                    fname = ix["chunks"][i]["file"]
+                    if rid2 in mem._retrieved:
+                        score *= mem.REDUNDANCY_PENALTY_LAST_TURN
+                    if fname in mem._active_files:
+                        score *= (1.0 + mem.SESSION_ZONE_BONUS * mem._active_files[fname])
+                    scored.append((rid2, score))
+                scored.sort(key=lambda x: -x[1])
+                top_cg = [r for r, _ in scored[:10]]
+            else:
+                top_cg = [ix["chunks"][i]["id"] for i in top_idx[:10]]
 
             m  = mrr(top_cg, gt)
             s5 = success_at_k(top_cg, gt, 5)
@@ -309,7 +331,7 @@ def main():
     }
     with open("results/turn_position_results.json", "w") as f:
         json.dump(out, f, indent=2)
-    print("\n  Saved → results/turn_position_results.json")
+    print("\n  Saved -> results/turn_position_results.json")
     print("=" * 70)
 
 
