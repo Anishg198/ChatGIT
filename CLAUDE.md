@@ -54,6 +54,13 @@ python -m evaluation.eval_latency
 # (Re)train the ML intent classifier from labeled conversation data
 python -m evaluation.train_intent_classifier
 # Output: chatgit/core/intent_clf.pkl
+
+# Other evaluation utilities
+python -m evaluation.eval_conversation        # per-conversation metrics
+python -m evaluation.eval_turn_position       # performance by turn depth
+python -m evaluation.baselines                # baseline comparisons
+python -m evaluation.statistical_tests        # significance tests on results
+python -m evaluation.run_generation_eval      # generation-focused eval
 ```
 
 ### Syntax check (no server needed)
@@ -92,7 +99,7 @@ ChatGIT is an AI-powered code Q&A system. A user loads a GitHub repo URL; the ba
 | 5 | `git_analyzer.py` | N1 | Time-decay weighting (frequency 50%, recency 30%, authors 20%) |
 | 6 | `session_memory.py` | N3 | Redundancy penalty + session-zone coherence bonus |
 | 7 | `reranker.py` | — | Cross-encoder reranking (ms-marco-MiniLM-L-6-v2) |
-| 8 | inline in `app.py` | N5 | Bidirectional call-graph neighborhood (injected into prompt, not retrieved chunks) |
+| 8 | `graph/dependency.py` inline in `app.py` | N5 | Bidirectional call-graph neighborhood via `FunctionDependencyAnalyzer` (injected into prompt, not retrieved chunks) |
 | 9 | Groq API | — | Llama 3.1-8B inference |
 | 10 | `snippets.py` | — | Precise line-number annotation on code references |
 
@@ -108,7 +115,7 @@ ChatGIT is an AI-powered code Q&A system. A user loads a GitHub repo URL; the ba
 
 ### Frontend (`chatgit-react/frontend/src/`)
 
-React + Vite SPA. API base URL is configured in `config.js` (`http://localhost:8000`). Key components: `App.jsx` (global state, localStorage persistence), `Chat.jsx` (markdown + syntax-highlighted responses), `Dashboard.jsx` (PageRank/HITS metrics), `CallGraph.jsx` (vis-network), `StructureExplorer.jsx`.
+React + Vite SPA. API base URL is configured in `config.js` (`http://localhost:8000`). Key components: `App.jsx` (global state, localStorage persistence), `Chat.jsx` (markdown + syntax-highlighted responses), `Dashboard.jsx` (PageRank/HITS metrics), `CallGraph.jsx` (vis-network), `StructureExplorer.jsx`, `Sidebar.jsx`.
 
 ### Evaluation Data & Results
 
