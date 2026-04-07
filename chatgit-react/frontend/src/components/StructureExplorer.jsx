@@ -1,18 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
+import {
+  Folder, FolderOpen, FileCode, FileText, File, ChevronRight, ChevronDown,
+} from 'lucide-react';
+import { FolderTree } from 'lucide-react';
+
+const FileIcon = ({ name }) => {
+  if (name.endsWith('.py'))                        return <FileCode size={14} className="tree-icon-py" />;
+  if (name.endsWith('.js') || name.endsWith('.jsx')) return <FileCode size={14} className="tree-icon-js" />;
+  if (name.endsWith('.ts') || name.endsWith('.tsx')) return <FileCode size={14} className="tree-icon-ts" />;
+  if (name.endsWith('.md'))                         return <FileText size={14} className="tree-icon-md" />;
+  return <File size={14} className="tree-icon-default" />;
+};
 
 const TreeNode = ({ name, data, isFile, depth }) => {
   const [expanded, setExpanded] = useState(false);
   const indent = depth * 18;
-
-  let icon = expanded ? '📂' : '📁';
-  if (isFile) {
-    if (name.endsWith('.py'))  icon = '🐍';
-    else if (name.endsWith('.js') || name.endsWith('.jsx')) icon = '📜';
-    else if (name.endsWith('.ts') || name.endsWith('.tsx')) icon = '📘';
-    else icon = '📄';
-  }
 
   if (isFile) {
     const functions = data.functions || [];
@@ -24,10 +28,10 @@ const TreeNode = ({ name, data, isFile, depth }) => {
           style={{ paddingLeft: indent + 10 }}
           onClick={() => setExpanded(e => !e)}
         >
-          <span>{icon}</span>
+          <FileIcon name={name} />
           <span>{name}</span>
           {(functions.length > 0 || classes.length > 0) && (
-            <span style={{ marginLeft: 'auto', fontSize: 11, opacity: .5 }}>
+            <span className="tree-node-counts">
               {classes.length > 0 && `${classes.length} cls`}
               {classes.length > 0 && functions.length > 0 && ' · '}
               {functions.length > 0 && `${functions.length} fn`}
@@ -56,18 +60,17 @@ const TreeNode = ({ name, data, isFile, depth }) => {
     );
   }
 
-  // Directory node
   return (
     <div>
       <div
-        className="tree-node-row"
-        style={{ paddingLeft: indent + 10, fontWeight: 600 }}
+        className="tree-node-row tree-node-dir"
+        style={{ paddingLeft: indent + 10 }}
         onClick={() => setExpanded(e => !e)}
       >
-        <span>{expanded ? '📂' : '📁'}</span>
+        {expanded ? <FolderOpen size={14} className="tree-icon-folder" /> : <Folder size={14} className="tree-icon-folder" />}
         <span>{name}</span>
-        <span style={{ marginLeft: 'auto', fontSize: 11, opacity: .4 }}>
-          {expanded ? '▾' : '▸'}
+        <span className="tree-chevron">
+          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </span>
       </div>
       {expanded && (
@@ -121,21 +124,20 @@ const StructureExplorer = () => {
 
   return (
     <div className="structure-container">
-      <div className="section-header" style={{ marginBottom: 16 }}>
-        <h2>🗂 Repository Explorer</h2>
+      <div className="section-header">
+        <FolderTree size={17} style={{ color: 'var(--accent)' }} />
+        <h2>Repository Explorer</h2>
         <span className="section-badge">AST View</span>
       </div>
 
       {loading && (
-        <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '12px 0' }}>
-          Loading file tree…
-        </div>
+        <div className="empty-state-text">Loading file tree…</div>
       )}
       {!loading && !fileTree && (
-        <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>No structure available.</div>
+        <div className="empty-state-text">No structure available.</div>
       )}
       {!loading && fileTree && (
-        <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+        <div className="tree-scroll">
           {Object.keys(fileTree).sort().map(name => (
             <TreeNode
               key={name}

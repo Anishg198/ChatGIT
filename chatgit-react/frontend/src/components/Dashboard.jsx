@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
+import { File, Code2, Layers, Package, Network } from 'lucide-react';
 
 /* Animated counter hook */
 function useCountUp(target, duration = 900) {
@@ -20,23 +21,21 @@ function useCountUp(target, duration = 900) {
   return value;
 }
 
-const StatCard = ({ icon, label, value, delay, color }) => {
+const StatCard = ({ icon, label, value }) => {
   const animated = useCountUp(value);
   return (
-    <div className="stat-card" style={{ animationDelay: `${delay}s` }}>
+    <div className="stat-card">
       <span className="stat-icon">{icon}</span>
-      <div className="stat-value" style={{ color: color || 'var(--text-primary)' }}>
-        {animated.toLocaleString()}
-      </div>
+      <div className="stat-value">{animated.toLocaleString()}</div>
       <div className="stat-label">{label}</div>
     </div>
   );
 };
 
-const RankItem = ({ rank, name, score, maxScore, isLocal, delay, colorClass }) => {
+const RankItem = ({ rank, name, score, maxScore, isLocal }) => {
   const pct = maxScore > 0 ? (score / maxScore) * 100 : 0;
   return (
-    <div className="rank-item" style={{ animationDelay: `${delay}s` }}>
+    <div className="rank-item">
       <span className="rank-num">{rank}</span>
       <span className={`rank-name ${isLocal ? 'local' : ''}`} title={name}>
         {name.split('/').pop() || name}
@@ -59,10 +58,10 @@ const RankItem = ({ rank, name, score, maxScore, isLocal, delay, colorClass }) =
 
 const Dashboard = ({ metrics, showHits }) => {
   const [view, setView] = useState('files');
-  const [topFiles, setTopFiles]       = useState([]);
+  const [topFiles, setTopFiles]         = useState([]);
   const [topFunctions, setTopFunctions] = useState([]);
-  const [topModules, setTopModules]   = useState([]);
-  const [hitsData, setHitsData]       = useState(null);
+  const [topModules, setTopModules]     = useState([]);
+  const [hitsData, setHitsData]         = useState(null);
 
   useEffect(() => {
     if (!metrics) return;
@@ -91,10 +90,10 @@ const Dashboard = ({ metrics, showHits }) => {
   if (!metrics) return null;
 
   const tabs = [
-    { id: 'files',     label: '📄 Files' },
-    { id: 'functions', label: '⚙ Functions' },
-    { id: 'modules',   label: '📦 Modules' },
-    ...(showHits ? [{ id: 'hits', label: '◎ HITS' }] : []),
+    { id: 'files',     label: 'Files',     icon: <File size={13} /> },
+    { id: 'functions', label: 'Functions', icon: <Code2 size={13} /> },
+    { id: 'modules',   label: 'Modules',   icon: <Package size={13} /> },
+    ...(showHits ? [{ id: 'hits', label: 'HITS', icon: <Network size={13} /> }] : []),
   ];
 
   const maxScore = (list) =>
@@ -111,7 +110,7 @@ const Dashboard = ({ metrics, showHits }) => {
           </div>
         </div>
         <div className="lang-chips">
-          {['py','js','ts','java','go','cpp'].map(l => (
+          {['py', 'js', 'ts', 'java', 'go', 'cpp'].map(l => (
             <span key={l} className={`lang-chip ${l}`}>{l.toUpperCase()}</span>
           ))}
         </div>
@@ -119,10 +118,10 @@ const Dashboard = ({ metrics, showHits }) => {
 
       {/* Stats */}
       <div className="stats-grid">
-        <StatCard icon="🗂" label="Total Files"     value={metrics.total_files}     delay={0.05} color="var(--accent-light)" />
-        <StatCard icon="⚙" label="Functions"       value={metrics.total_functions}  delay={0.10} color="var(--purple)" />
-        <StatCard icon="◻" label="Classes"         value={metrics.total_classes}    delay={0.15} color="var(--cyan)" />
-        <StatCard icon="📦" label="Packages"        value={metrics.total_packages}   delay={0.20} color="var(--amber)" />
+        <StatCard icon={<File size={20} />}    label="Total Files"  value={metrics.total_files}     delay={0.05} />
+        <StatCard icon={<Code2 size={20} />}   label="Functions"    value={metrics.total_functions} delay={0.10} />
+        <StatCard icon={<Layers size={20} />}  label="Classes"      value={metrics.total_classes}   delay={0.15} />
+        <StatCard icon={<Package size={20} />} label="Packages"     value={metrics.total_packages}  delay={0.20} />
       </div>
 
       {/* PageRank / HITS */}
@@ -138,6 +137,7 @@ const Dashboard = ({ metrics, showHits }) => {
             className={`tab ${view === t.id ? 'active' : ''}`}
             onClick={() => setView(t.id)}
           >
+            <span className="tab-icon">{t.icon}</span>
             {t.label}
           </button>
         ))}
@@ -147,8 +147,8 @@ const Dashboard = ({ metrics, showHits }) => {
         {view === 'files' && (
           <div className="rank-list">
             {topFiles.map((item, i) => (
-              <RankItem key={i} rank={i+1} name={item.name} score={item.score}
-                maxScore={maxScore(topFiles)} delay={i * 0.04} />
+              <RankItem key={i} rank={i + 1} name={item.name} score={item.score}
+                maxScore={maxScore(topFiles)}  />
             ))}
           </div>
         )}
@@ -156,8 +156,8 @@ const Dashboard = ({ metrics, showHits }) => {
         {view === 'functions' && (
           <div className="rank-list">
             {topFunctions.map((item, i) => (
-              <RankItem key={i} rank={i+1} name={item.name} score={item.score}
-                maxScore={maxScore(topFunctions)} delay={i * 0.04} />
+              <RankItem key={i} rank={i + 1} name={item.name} score={item.score}
+                maxScore={maxScore(topFunctions)}  />
             ))}
           </div>
         )}
@@ -165,8 +165,8 @@ const Dashboard = ({ metrics, showHits }) => {
         {view === 'modules' && (
           <div className="rank-list">
             {topModules.map((item, i) => (
-              <RankItem key={i} rank={i+1} name={item.name} score={item.score}
-                isLocal={item.is_local} maxScore={maxScore(topModules)} delay={i * 0.04} />
+              <RankItem key={i} rank={i + 1} name={item.name} score={item.score}
+                isLocal={item.is_local} maxScore={maxScore(topModules)}  />
             ))}
           </div>
         )}
@@ -174,44 +174,38 @@ const Dashboard = ({ metrics, showHits }) => {
         {view === 'hits' && hitsData && (
           <div>
             {/* File HITS */}
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                File-Level HITS
-              </div>
+            <div className="hits-subsection">
+              <div className="hits-subsection-title">File-Level HITS</div>
               <div className="hits-col">
                 <div>
                   <div className="hits-section-title">
                     <span className="hits-hub-dot" /> Hubs
-                    <span style={{ fontWeight: 400, fontSize: 10, color: 'var(--text-muted)' }}>
-                      &nbsp;— entry points / orchestrators
-                    </span>
+                    <span className="hits-section-note">— entry points / orchestrators</span>
                   </div>
                   <div className="rank-list">
                     {(hitsData.files?.hubs || []).map((item, i) => (
-                      <RankItem key={i} rank={i+1} name={item.name} score={item.score}
-                        maxScore={Math.max(...(hitsData.files?.hubs||[]).map(x=>x.score),0.001)}
-                        delay={i*0.04} />
+                      <RankItem key={i} rank={i + 1} name={item.name} score={item.score}
+                        maxScore={Math.max(...(hitsData.files?.hubs || []).map(x => x.score), 0.001)}
+                         />
                     ))}
                     {!(hitsData.files?.hubs?.length) && (
-                      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No hub data</div>
+                      <div className="empty-state-text">No hub data</div>
                     )}
                   </div>
                 </div>
                 <div>
                   <div className="hits-section-title">
                     <span className="hits-auth-dot" /> Authorities
-                    <span style={{ fontWeight: 400, fontSize: 10, color: 'var(--text-muted)' }}>
-                      &nbsp;— core utilities / widely imported
-                    </span>
+                    <span className="hits-section-note">— core utilities / widely imported</span>
                   </div>
                   <div className="rank-list">
                     {(hitsData.files?.authorities || []).map((item, i) => (
-                      <RankItem key={i} rank={i+1} name={item.name} score={item.score}
-                        maxScore={Math.max(...(hitsData.files?.authorities||[]).map(x=>x.score),0.001)}
-                        delay={i*0.04} />
+                      <RankItem key={i} rank={i + 1} name={item.name} score={item.score}
+                        maxScore={Math.max(...(hitsData.files?.authorities || []).map(x => x.score), 0.001)}
+                         />
                     ))}
                     {!(hitsData.files?.authorities?.length) && (
-                      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No authority data</div>
+                      <div className="empty-state-text">No authority data</div>
                     )}
                   </div>
                 </div>
@@ -219,44 +213,38 @@ const Dashboard = ({ metrics, showHits }) => {
             </div>
 
             {/* Function HITS */}
-            <div>
-              <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                Function-Level HITS
-              </div>
+            <div className="hits-subsection">
+              <div className="hits-subsection-title">Function-Level HITS</div>
               <div className="hits-col">
                 <div>
                   <div className="hits-section-title">
                     <span className="hits-hub-dot" /> Hubs
-                    <span style={{ fontWeight: 400, fontSize: 10, color: 'var(--text-muted)' }}>
-                      &nbsp;— call many functions
-                    </span>
+                    <span className="hits-section-note">— call many functions</span>
                   </div>
                   <div className="rank-list">
                     {(hitsData.functions?.hubs || []).map((item, i) => (
-                      <RankItem key={i} rank={i+1} name={item.name} score={item.score}
-                        maxScore={Math.max(...(hitsData.functions?.hubs||[]).map(x=>x.score),0.001)}
-                        delay={i*0.04} />
+                      <RankItem key={i} rank={i + 1} name={item.name} score={item.score}
+                        maxScore={Math.max(...(hitsData.functions?.hubs || []).map(x => x.score), 0.001)}
+                         />
                     ))}
                     {!(hitsData.functions?.hubs?.length) && (
-                      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No hub data</div>
+                      <div className="empty-state-text">No hub data</div>
                     )}
                   </div>
                 </div>
                 <div>
                   <div className="hits-section-title">
                     <span className="hits-auth-dot" /> Authorities
-                    <span style={{ fontWeight: 400, fontSize: 10, color: 'var(--text-muted)' }}>
-                      &nbsp;— called by many hubs
-                    </span>
+                    <span className="hits-section-note">— called by many hubs</span>
                   </div>
                   <div className="rank-list">
                     {(hitsData.functions?.authorities || []).map((item, i) => (
-                      <RankItem key={i} rank={i+1} name={item.name} score={item.score}
-                        maxScore={Math.max(...(hitsData.functions?.authorities||[]).map(x=>x.score),0.001)}
-                        delay={i*0.04} />
+                      <RankItem key={i} rank={i + 1} name={item.name} score={item.score}
+                        maxScore={Math.max(...(hitsData.functions?.authorities || []).map(x => x.score), 0.001)}
+                         />
                     ))}
                     {!(hitsData.functions?.authorities?.length) && (
-                      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No authority data</div>
+                      <div className="empty-state-text">No authority data</div>
                     )}
                   </div>
                 </div>
@@ -266,7 +254,7 @@ const Dashboard = ({ metrics, showHits }) => {
         )}
 
         {view === 'hits' && !hitsData && (
-          <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '20px 0' }}>
+          <div className="empty-state-text" style={{ padding: '20px 0' }}>
             Loading HITS analysis…
           </div>
         )}

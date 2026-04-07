@@ -7,6 +7,7 @@ import Dashboard from './components/Dashboard';
 import Chat from './components/Chat';
 import CallGraph from './components/CallGraph';
 import StructureExplorer from './components/StructureExplorer';
+import { GitBranch } from 'lucide-react';
 
 const LOADING_STEPS = [
   { id: 'clone',   label: 'Cloning repository' },
@@ -135,7 +136,7 @@ function App() {
           </>
         ) : (
           <div className="welcome-screen">
-            <div className="welcome-orb">⬡</div>
+            <div className="welcome-orb"><GitBranch size={38} /></div>
             <h1>ChatGIT</h1>
             <p>
               Paste a GitHub URL in the sidebar to load a repository.

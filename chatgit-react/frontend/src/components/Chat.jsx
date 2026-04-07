@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../config';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { MessageSquare, Send } from 'lucide-react';
 
 const TypingIndicator = () => (
   <div className="message assistant" style={{ animationDelay: '0s' }}>
@@ -35,16 +36,7 @@ const CodeBlock = memo(({ className, children }) => {
 
   if (!langMatch) {
     return (
-      <code style={{
-        background: 'rgba(0,0,0,.35)',
-        padding: '2px 6px',
-        borderRadius: 4,
-        fontSize: 12,
-        color: 'var(--cyan)',
-        fontFamily: 'var(--font-mono)',
-      }}>
-        {children}
-      </code>
+      <code className="inline-code">{children}</code>
     );
   }
 
@@ -73,11 +65,11 @@ const MessageBubble = memo(({ role, content }) => (
         components={{
           code({ node, inline, className, children, ...props }) {
             return inline
-              ? <code style={{ background:'rgba(0,0,0,.35)', padding:'2px 5px', borderRadius:4, fontSize:12, color:'var(--cyan)', fontFamily:'var(--font-mono)' }}>{children}</code>
+              ? <code className="inline-code">{children}</code>
               : <CodeBlock className={className}>{children}</CodeBlock>;
           },
           strong({ children }) {
-            return <strong style={{ color:'var(--accent-light)', fontWeight:600 }}>{children}</strong>;
+            return <strong className="md-strong">{children}</strong>;
           },
         }}
       >
@@ -87,7 +79,6 @@ const MessageBubble = memo(({ role, content }) => (
   </div>
 ));
 
-// Isolated input component — never re-renders due to conversation changes
 const ChatInput = memo(({ onSend, waiting, message, setMessage, onKey }) => (
   <div className="chat-input-area">
     <div className="chat-input-wrap">
@@ -103,7 +94,7 @@ const ChatInput = memo(({ onSend, waiting, message, setMessage, onKey }) => (
       />
     </div>
     <button className="chat-send-btn" onClick={onSend} disabled={waiting || !message.trim()}>
-      ➤
+      <Send size={16} />
     </button>
   </div>
 ));
@@ -147,7 +138,8 @@ const Chat = ({ chatLog, codeEnhancement }) => {
   return (
     <div>
       <div className="chat-section-header">
-        <h2>💬 Chat</h2>
+        <MessageSquare size={18} style={{ color: 'var(--accent)' }} />
+        <h2>Chat</h2>
         <span className="section-badge">Multi-turn · Session memory · Intent routing</span>
       </div>
 
@@ -155,9 +147,11 @@ const Chat = ({ chatLog, codeEnhancement }) => {
         <div className="chat-messages">
           {conversation.length === 0 && !waiting && (
             <div className="chat-empty">
-              <div className="chat-empty-icon">💬</div>
+              <div className="chat-empty-icon">
+                <MessageSquare size={32} />
+              </div>
               <div>Ask anything about the repository</div>
-              <div style={{ fontSize: 12, opacity: .6 }}>
+              <div className="chat-empty-hint">
                 Try: "Explain the main entry point" · "Where is auth handled?" · "Debug the error handler"
               </div>
             </div>
