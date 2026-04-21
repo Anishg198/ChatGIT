@@ -44,3 +44,4 @@ build/
 
 # Benchmark repos (cloned locally, not part of project)
 *_bench/
+CLAUDE.md
